@@ -1,0 +1,4 @@
+*.html
+results.csv
+__pycache__/*
+test.py
