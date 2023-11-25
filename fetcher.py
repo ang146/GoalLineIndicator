@@ -146,7 +146,7 @@ class Fetcher:
             if not currentTime.startswith("半場"):
                 match_time = currentTime[3:]
                 if len(currentTime) > 6:
-                    if (currentTime[3:].startswith("4")):
+                    if (currentTime[3:].startswith("4") or currentTime[3].startswith("5")):
                         currentIntTime = 45
                     else:
                         currentIntTime = 90
