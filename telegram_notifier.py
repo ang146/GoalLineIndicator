@@ -2,7 +2,7 @@ import telegram
 import schedule, time
 from fetcher import Fetcher
 from config import *
-import asyncio
+import asyncio, threading
 
 DRIVER_NAME = 'SQL SERVER'
 CONNECTION_STRING = f"""
@@ -30,11 +30,16 @@ async def SendNotificationToTelegramAsync():
 def async_main_start():
     asyncio.run(SendNotificationToTelegramAsync()) 
     
+def threading_main_start():
+    t = threading.Thread(target=async_main_start)
+    t.start()
+    
 if __name__ == "__main__":
     global fetcher
     fetcher = Fetcher(False, CONNECTION_STRING)
     async_main_start()
-    schedule.every(CHECKINTERVAL).minutes.do(async_main_start)
+    #schedule.every(CHECKINTERVAL).minutes.do(async_main_start)
+    schedule.every(CHECKINTERVAL_SECOND).seconds.do(threading_main_start)
     
     while True:
         schedule.run_pending()

@@ -9,6 +9,7 @@ TOCHECKMINUTES = 50
 
 #每隔幾多分鐘check 1次, 分鐘為單位, 整數
 CHECKINTERVAL = 1
+CHECKINTERVAL_SECOND = 30
 
 #大波賠率要求細過幾多, 可以有小數.
 #不想提示可直接設為1
