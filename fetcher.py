@@ -131,16 +131,15 @@ class Fetcher:
             match_id = matchOddsLink[-13:-5]
             match_url = f"https://bet.hkjc.com/football/odds/odds_inplay_all.aspx?lang=CH&tmatchid={match_id}"
             
-            if match_score != "0-0":
-                print(f"{home_name} 對 {away_name}目前比分並非0-0, 將跳過")
-                half_time_score = centerText.find("small")
-                if half_time_score is None:
-                    continue
-                
+            half_time_score = centerText.find("small")
+            if not half_time_score is None:
                 if half_time_score.text == "(0-0)":
                     self.recorder.WriteResult(match_id, False)
                 else:
                     self.recorder.WriteResult(match_id, True)
+            
+            if match_score != "0-0":
+                print(f"{home_name} 對 {away_name}目前比分並非0-0, 將跳過")
                 continue
             
             currentTime = centerText.select_one(".text-danger").text
