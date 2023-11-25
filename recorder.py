@@ -12,11 +12,11 @@ class Recorder:
         result = self.cursor.execute("select match_id from [HKJC_Odds].[dbo].[half_time_live] where match_id = ?", match_id).fetchone()
         return result is None
     
-    def WriteMatch(self, match_id:str, recorded_time:int, recorded_odd:float):
+    def WriteMatch(self, match_id:str, recorded_time:int, recorded_odd:float, before_match_odd:float):
         is_new = self.CheckIsNew(match_id)
-        data = [(match_id, recorded_time, recorded_odd)]
+        data = [(match_id, recorded_time, recorded_odd, before_match_odd)]
         if is_new:
-            self.cursor.executemany("insert into [HKJC_Odds].[dbo].[half_time_live] (match_id, recorded_time, recorded_odd) values (?, ?, ?)", data)
+            self.cursor.executemany("insert into [HKJC_Odds].[dbo].[half_time_live] (match_id, recorded_time, recorded_odd, before_match_odd) values (?, ?, ?, ?)", data)
             self.cursor.commit()
     
     def WriteResult(self, match_id:str, success: bool):
@@ -49,6 +49,8 @@ class Recorder:
                 
 if __name__ == "__main__":
     from config import *
+    from bs4 import BeautifulSoup
+    import requests
     driver = 'SQL SERVER'
     connection_string = f"""
         DRIVER={{{driver}}};
@@ -58,6 +60,48 @@ if __name__ == "__main__":
         Trust_Connection=yes;
         uid={USER_NAME};
         pwd={PASSWORD};
-    """
-    recorder = Recorder(connection_string)
-    print(recorder.GetSuccessRateByTime(13,16))
+    """    
+    def GetWebsiteData(site_domain :str, site_api :str) -> requests.Response:
+        session = requests.Session()
+        r = session.get(site_domain)
+        
+        header = {"referer": site_domain, 
+            "user-agent": 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.111 Safari/537.36'}
+        
+        liveMatches_url = f'{site_domain}{site_api}'
+        result = session.post(
+            liveMatches_url,
+            headers=header,
+            cookies=r.cookies
+        )
+        return result
+    def FindGoalLineOdds(match_odd_url :str, odd_type:str) -> dict:
+        result = GetWebsiteData("http://g10oal.com", match_odd_url).text
+        soup = BeautifulSoup(result, "html.parser")
+        table = soup.find("a", {"name" : odd_type}).next_sibling.next_sibling.next_sibling.next_sibling
+        tbody = table.find("tbody")
+        odds = tbody.find_all("tr", class_=lambda c: c != "table-secondary")
+        wanted_odds = {}
+        for odd in odds:
+            goalLines = odd.find_all("td", class_="text-center")
+            goalLine = goalLines[1].text
+            
+            highOdd = float(goalLines[0].text)
+            
+            if goalLine in wanted_odds.keys():
+                continue
+            wanted_odds[goalLine] = highOdd
+        return wanted_odds
+    
+    conn = pyodbc.connect(connection_string)
+    cursor = conn.cursor()
+    match_ids = cursor.execute("select match_id from [HKJC_Odds].[dbo].[half_time_live]").fetchall()
+    for id_list in match_ids:
+        id = id_list[0]
+        odds = FindGoalLineOdds(f"/match/{id}/odds", 'fhl')
+        one_five = odds['1.5']
+        cursor.execute("update [HKJC_Odds].[dbo].[half_time_live] set before_match_odd = ? where match_id = ?", (one_five, id))
+        cursor.commit()
+    
+    #recorder = Recorder(connection_string)
+    #print(recorder.GetSuccessRateByTime(13,16))
