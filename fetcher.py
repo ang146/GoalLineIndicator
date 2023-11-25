@@ -7,6 +7,8 @@ from recorder import Recorder
 
 G10OALSITE = 'http://g10oal.com'
 HKJC_SITE = 'http://bet.hkjc.com'
+FULLTIME_GOALLINE="hil"
+HALFTIME_GOALLINE="fhl"
 class Fetcher:
     half_time_fetch_cache = None
     full_time_fetch_cache = None
@@ -90,10 +92,10 @@ class Fetcher:
                 result = self.__GetWebsiteData(hkjc_domain, hkjc_api)
         return no_result
         
-    def __FindGoalLineOdds(self, match_odd_url :str) -> dict:
+    def __FindGoalLineOdds(self, match_odd_url :str, odd_type:str) -> dict:
         result = self.__GetWebsiteData(G10OALSITE, match_odd_url).text
         soup = BeautifulSoup(result, "html.parser")
-        table = soup.find("a", {"name" : "hil"}).next_sibling.next_sibling.next_sibling.next_sibling
+        table = soup.find("a", {"name" : odd_type}).next_sibling.next_sibling.next_sibling.next_sibling
         tbody = table.find("tbody")
         odds = tbody.find_all("tr", class_=lambda c: c != "table-secondary")
         wanted_odds = {}
@@ -132,7 +134,7 @@ class Fetcher:
             match_url = f"https://bet.hkjc.com/football/odds/odds_inplay_all.aspx?lang=CH&tmatchid={match_id}"
             
             half_time_score = centerText.find("small")
-            if not half_time_score is None:
+            if not half_time_score is None and self.use_db:
                 if half_time_score.text == "(0-0)":
                     self.recorder.WriteResult(match_id, False)
                 else:
@@ -162,24 +164,30 @@ class Fetcher:
                 half_time_odds = self.__FetchHalfTimeOdds(match_id, is_live_match)
                 if half_time_odds[0]:
                     win_rate = ""
+                    half_time_odds_before_match = self.__FindGoalLineOdds(matchOddsLink, HALFTIME_GOALLINE)
+                    one_five_odd = half_time_odds_before_match["1.5"]
                     if self.use_db:
-                        self.recorder.WriteMatch(match_id, currentIntTime, half_time_odds[1])
+                        self.recorder.WriteMatch(match_id, currentIntTime, half_time_odds[1], one_five_odd)
                         exact_win_rate = self.recorder.GetSuccessRateByTime(currentIntTime, currentIntTime)
                         min_minutes = int(currentIntTime / 5) * 5 + 1
-                        range_mins_win_rate = self.recorder.GetSuccessRateByTime(min_minutes, min_minutes + 4)
+                        group_mins_win_rate = self.recorder.GetSuccessRateByTime(min_minutes, min_minutes + 4)
+                        range_mins_win_rate = self.recorder.GetSuccessRateByTime(currentIntTime-2, currentIntTime+2)
                         if exact_win_rate != -1:
                             win_rate += "\n提醒於{time}分發出的成功率為: {rate:.2f}".format(time= currentIntTime,rate=exact_win_rate)
+                        if group_mins_win_rate != -1:
+                            win_rate += "\n提醒於{time_min}分至{time_max}分發出的成功率為: {rate:.2f}".format(time_min= min_minutes, time_max= min_minutes + 4, rate=group_mins_win_rate)
                         if range_mins_win_rate != -1:
-                            win_rate += "\n提醒於{time_min}分至{time_max}分發出的成功率為: {rate:.2f}".format(time_min= min_minutes, time_max= min_minutes + 4, rate=exact_win_rate)
+                            win_rate += "\n提醒於{time_min}分至{time_max}分發出的成功率為: {rate:.2f}".format(time_min= currentIntTime -2, time_max= currentIntTime + 2, rate=range_mins_win_rate)
                         
                     header = f'{home_name} 對 {away_name} 即場半場0.75大有水'
                     body = f'目前球賽時間 {match_time}, 目前賠率:\n{half_time_odds[0]}大: {half_time_odds[1]} {win_rate}'
                     toReturn.append([header, body, match_url])
                     
-                    if len(self.half_time_fetch_cache) > 200:
+                    if len(self.half_time_fetch_cache) > 100:
                         _ = self.half_time_fetch_cache.pop(0)
                         
                     self.half_time_fetch_cache.append(match_id)
+                    continue
                     
             if currentIntTime < TOCHECKMINUTES:
                 print(f"{home_name} 對 {away_name}目前未過{TOCHECKMINUTES}分鐘, 將跳過")
@@ -189,10 +197,7 @@ class Fetcher:
                 print(f"{home_name} 對 {away_name} 已經出咗通知, 唔會再出")
                 continue
             
-            goalLines = self.__FindGoalLineOdds(matchOddsLink)
-            if len(goalLines) == 0:
-                print(f"搵唔到{home_name} 對 {away_name}有2.25/2.5/2.75中位數之大細球盤, 將跳過")
-                continue
+            goalLines = self.__FindGoalLineOdds(matchOddsLink, FULLTIME_GOALLINE)
             match_title = home_name + " 對 " + away_name + " 大波有feel"
             match_body = f"目前球賽時間 {match_time}, 賽前賠率:\n"
             goal_line_odds_message = ""
@@ -204,7 +209,7 @@ class Fetcher:
                 print(f"~~{home_name} 對 {away_name} 符合要求~~")
                 toReturn.append([match_title, match_body, match_url])
                 
-                if len(self.full_time_fetch_cache) > 200:
+                if len(self.full_time_fetch_cache) > 50:
                     _ = self.full_time_fetch_cache.pop(0)
                     
                 self.full_time_fetch_cache.append(match_id)

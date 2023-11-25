@@ -11,7 +11,7 @@ def CreateNotify():
 if __name__ == "__main__":
     fetcher = Fetcher(True)
     CreateNotify()
-    schedule.every(2).seconds.do(CreateNotify)
+    schedule.every(30).seconds.do(CreateNotify)
     #schedule.every(CHECKINTERVAL).minutes.do(CreateNotify)
     
     while True:
