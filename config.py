@@ -5,7 +5,7 @@
 # pip install win11toast
 
 #只檢測_分鐘後賽事 預設46分鐘(包括半場), 整數
-TOCHECKMINUTES = 50
+TOCHECKMINUTES = 65
 
 #每隔幾多分鐘check 1次, 分鐘為單位, 整數
 CHECKINTERVAL = 1

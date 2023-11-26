@@ -177,7 +177,7 @@ class Fetcher:
                         if group_mins_win_rate != -1:
                             win_rate += "\n提醒於{time_min}分至{time_max}分發出的成功率為: {rate:.2f}".format(time_min= min_minutes, time_max= min_minutes + 4, rate=group_mins_win_rate)
                         if range_mins_win_rate != -1:
-                            win_rate += "\n提醒於{time_min}分至{time_max}分發出的成功率為: {rate:.2f}".format(time_min= currentIntTime -2, time_max= currentIntTime + 2, rate=range_mins_win_rate)
+                            win_rate += "\n提醒於{time}前後2分鐘發出的成功率為: {rate:.2f}".format(time_min= currentIntTime, rate=range_mins_win_rate)
                         
                     header = f'{home_name} 對 {away_name} 即場半場0.75大有水'
                     body = f'目前球賽時間 {match_time}, 目前賠率:\n{half_time_odds[0]}大: {half_time_odds[1]} {win_rate}'
@@ -187,36 +187,35 @@ class Fetcher:
                         _ = self.half_time_fetch_cache.pop(0)
                         
                     self.half_time_fetch_cache.append(match_id)
+            else:
+                if currentIntTime < TOCHECKMINUTES:
+                    print(f"{home_name} 對 {away_name}目前未過{TOCHECKMINUTES}分鐘, 將跳過")
                     continue
                     
-            if currentIntTime < TOCHECKMINUTES:
-                print(f"{home_name} 對 {away_name}目前未過{TOCHECKMINUTES}分鐘, 將跳過")
-                continue
+                if match_id in self.full_time_fetch_cache and not self.keep_notifying:
+                    print(f"{home_name} 對 {away_name} 已經出咗通知, 唔會再出")
+                    continue
                 
-            if match_id in self.full_time_fetch_cache and not self.keep_notifying:
-                print(f"{home_name} 對 {away_name} 已經出咗通知, 唔會再出")
-                continue
-            
-            goalLines = self.__FindGoalLineOdds(matchOddsLink, FULLTIME_GOALLINE)
-            match_title = home_name + " 對 " + away_name + " 大波有feel"
-            match_body = f"目前球賽時間 {match_time}, 賽前賠率:\n"
-            goal_line_odds_message = ""
-            for line in goalLines:
-                if goalLines[line] <= DESIREDHIGHODD:
-                    goal_line_odds_message += f"{line}大 : {goalLines[line]}倍\n"
-            match_body += goal_line_odds_message
-            if len(goal_line_odds_message) > 0:
-                print(f"~~{home_name} 對 {away_name} 符合要求~~")
-                toReturn.append([match_title, match_body, match_url])
-                
-                if len(self.full_time_fetch_cache) > 50:
-                    _ = self.full_time_fetch_cache.pop(0)
+                goalLines = self.__FindGoalLineOdds(matchOddsLink, FULLTIME_GOALLINE)
+                match_title = home_name + " 對 " + away_name + " 大波有feel"
+                match_body = f"目前球賽時間 {match_time}, 賽前賠率:\n"
+                goal_line_odds_message = ""
+                for line in goalLines:
+                    if goalLines[line] <= DESIREDHIGHODD:
+                        goal_line_odds_message += f"{line}大 : {goalLines[line]}倍\n"
+                match_body += goal_line_odds_message
+                if len(goal_line_odds_message) > 0:
+                    print(f"~~{home_name} 對 {away_name} 符合要求~~")
+                    toReturn.append([match_title, match_body, match_url])
                     
-                self.full_time_fetch_cache.append(match_id)
-                
-            else:
-                print(f"{home_name} 對 {away_name}大小球賠率不符合自訂要求, 將跳過")
-                continue
+                    if len(self.full_time_fetch_cache) > 50:
+                        _ = self.full_time_fetch_cache.pop(0)
+                        
+                    self.full_time_fetch_cache.append(match_id)
+                    
+                else:
+                    print(f"{home_name} 對 {away_name}大小球賠率不符合自訂要求, 將跳過")
+                    continue
         self.fetch_counter += 1
         return toReturn
     
