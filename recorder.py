@@ -1,4 +1,5 @@
 import pyodbc
+from typing import List
 
 class Recorder:
     conn = None
@@ -9,45 +10,79 @@ class Recorder:
         self.cursor = self.conn.cursor()
     
     def CheckIsNew(self, match_id) -> bool:
-        result = self.cursor.execute("select match_id from [HKJC_Odds].[dbo].[half_time_live] where match_id = ?", match_id).fetchone()
+        result = self.cursor.execute("select id from [HKJC_Odds].[dbo].[live_match] where id = ?", match_id).fetchone()
         return result is None
     
-    def WriteMatch(self, match_id:str, recorded_time:int, recorded_odd:float, before_match_odd:float):
-        is_new = self.CheckIsNew(match_id)
-        data = [(match_id, recorded_time, recorded_odd, before_match_odd)]
-        if is_new:
-            self.cursor.executemany("insert into [HKJC_Odds].[dbo].[half_time_live] (match_id, recorded_time, recorded_odd, before_match_odd) values (?, ?, ?, ?)", data)
-            self.cursor.commit()
+    def GetUnfinishedMatchIds(self) -> List[str]:
+        #id_tuples = self.cursor.execute("select match_id from [HKJC_Odds].[dbo].[half_time_live] where success is null").fetchall()
+        id_tuples = self.cursor.execute("select id from [HKJC_Odds].[dbo].[live_match] where ht_success is null").fetchall()
+        ids = [t[0] for t in id_tuples]
+        return ids
     
-    def WriteResult(self, match_id:str, success: bool):
+    def WriteMatch(self, match_id:str, recorded_time:int, recorded_odd:float, is_first_half:bool):
         is_new = self.CheckIsNew(match_id)
-        if success:
-            data = (1, match_id)
-        else:
-            data = (0, match_id)
-        if not is_new:
-            self.cursor.execute("update [HKJC_Odds].[dbo].[half_time_live] set success = ? where match_id = ?", data)
+        if is_new:
+            data = (match_id, recorded_time, recorded_odd)
+            self.cursor.execute("insert into [HKJC_Odds].[dbo].[live_match] (id, ht_time, ht_odd) values (?, ?, ?)", data)
+            self.cursor.commit()
+        elif not is_first_half:
+            data = (recorded_time, recorded_odd, match_id)
+            self.cursor.execute("update [HKJC_Odds].[dbo].[live_match] set ft_time = ?, ft_odd = ? where id = ?", data)
             self.cursor.commit()
             
-    def GetSuccessRateByTime(self, match_time_min :int, match_time_max :int) -> float:
-        query = "select success from [HKJC_Odds].[dbo].[half_time_live] where recorded_time <= ? and recorded_time >= ?"
-        results = self.cursor.execute(query, (match_time_max, match_time_min)).fetchall()
+    
+    def WriteResult(self, match_id:str, prematch_odd:float, odd_rise:bool, success: bool, is_first_half:bool):
+        is_new = self.CheckIsNew(match_id)
+        data = (success, prematch_odd, odd_rise, match_id)
+        if not is_new:
+            if is_first_half:
+                self.cursor.execute("update [HKJC_Odds].[dbo].[live_match] set ht_success = ?, ht_prematch_odd = ?, ht_rise = ? where id = ?", data)
+            else:
+                self.cursor.execute("update [HKJC_Odds].[dbo].[live_match] set ft_success = ?, ft_prematch_odd = ?, ft_rise = ? where id = ?", data)
+            self.cursor.commit()
+            
+    def GetSuccessRateByTime(self, match_time_min :int, match_time_max :int, is_first_half:bool, check_flow :bool) -> float:
+        if is_first_half:
+            columns = ('ht_success', 'ht_time', 'ht_rise')
+        else:
+            columns = ('ft_success', 'ft_time', 'ft_rise')
+            
+        if check_flow is None:
+            query = f"select {columns[0]} from [HKJC_Odds].[dbo].[live_match] where {columns[1]} <= ? and {columns[1]} >= ? and {columns[2]} is null"
+            data = (match_time_max, match_time_min)
+        else:
+            query = f"select {columns[0]} from [HKJC_Odds].[dbo].[live_match] where {columns[1]} <= ? and {columns[1]} >= ? and {columns[2]} = ?"
+            data = (match_time_max, match_time_min, check_flow) 
+            
+        results = self.cursor.execute(query, data).fetchall()
         if len(results) == 0:
             return -1
         
         succeed = 0
         total = 0
-        for result in results:
-            if not result.success is None:
-                total += 1
-                if result.success:
-                    succeed += 1
-        if total < 10:
-            return -1
+        if is_first_half:
+            for result in results:
+                if not result.ht_success is None:
+                    total += 1
+                    if result.ht_success:
+                        succeed += 1
+            if total < 10:
+                return -1
+        else:
+            for result in results:
+                if not result.ft_success is None:
+                    total += 1
+                    if result.ft_success:
+                        succeed += 1
+            if total < 10:
+                return -1
+            
         
         return succeed/total * 100
                 
 if __name__ == "__main__":
+    
+    
     from config import *
     from bs4 import BeautifulSoup
     import requests
@@ -60,7 +95,12 @@ if __name__ == "__main__":
         Trust_Connection=yes;
         uid={USER_NAME};
         pwd={PASSWORD};
-    """    
+    """
+    recorder = Recorder(connection_string)
+    ids = recorder.GetUnfinishedMatchIds()
+    print(ids)
+    
+    '''
     def GetWebsiteData(site_domain :str, site_api :str) -> requests.Response:
         session = requests.Session()
         r = session.get(site_domain)
@@ -95,13 +135,14 @@ if __name__ == "__main__":
     
     conn = pyodbc.connect(connection_string)
     cursor = conn.cursor()
-    match_ids = cursor.execute("select match_id from [HKJC_Odds].[dbo].[half_time_live]").fetchall()
+    match_ids = cursor.execute("select id from [HKJC_Odds].[dbo].[live_match]").fetchall()
     for id_list in match_ids:
         id = id_list[0]
         odds = FindGoalLineOdds(f"/match/{id}/odds", 'fhl')
         one_five = odds['1.5']
-        cursor.execute("update [HKJC_Odds].[dbo].[half_time_live] set before_match_odd = ? where match_id = ?", (one_five, id))
+        cursor.execute("update [HKJC_Odds].[dbo].[live_match] set ht_prematch_odd = ? where id = ?", (one_five, id))
         cursor.commit()
     
     #recorder = Recorder(connection_string)
     #print(recorder.GetSuccessRateByTime(13,16))
+    '''
