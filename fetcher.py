@@ -56,14 +56,12 @@ class Fetcher:
     full_time_fetch_cache = None
     repository = None
     fetch_counter = None
-    keep_notifying = None
     
-    def __init__(self, keep_notify :bool, connection_string :str):
+    def __init__(self, connection_string :str):
         self.repository = ResultRepository(connection_string)
         self.fetch_counter = 1
         self.half_time_fetch_cache = []
         self.full_time_fetch_cache = []
-        self.keep_notifying = keep_notify
         
     def FillMatchResults(self) -> None:        
         dtos = self.repository.GetResults(False)
