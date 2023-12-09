@@ -3,23 +3,29 @@ import requests
 import json
 import bs4
 import utils
+import time
 
 class Crawler:
     @staticmethod
     def GetWebsiteData(site_domain :str, site_api :str) -> requests.Response:
-        session = requests.Session()
-        r = session.get(site_domain)
-        
-        header = {"referer": site_domain, 
-            "user-agent": 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.111 Safari/537.36'}
+        try:
+            session = requests.Session()
+            r = session.get(site_domain)
+            
+            header = {"referer": site_domain, 
+                "user-agent": 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.111 Safari/537.36'}
 
-        liveMatches_url = f'{site_domain}{site_api}'
-        result = session.post(
-            liveMatches_url,
-            headers=header,
-            cookies=r.cookies
-        )
-        return result
+            liveMatches_url = f'{site_domain}{site_api}'
+            result = session.post(
+                liveMatches_url,
+                headers=header,
+                cookies=r.cookies
+            )
+            return result
+        except ConnectionError:
+            print("Connection error, retrying.")
+            time.sleep(1)
+            return Crawler.GetWebsiteData(site_domain, site_api)
 
     @staticmethod
     def GetMatchResults(match_id:str) -> dict:

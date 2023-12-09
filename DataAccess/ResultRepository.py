@@ -64,7 +64,7 @@ class ResultRepository:
             to_return.append(dto)
             self.__cache[dto.id] = dto
             
-        return to_return
+        return list(self.__cache.values())
             
     def Upsert(self, dto:ResultDto):
         is_new = self.GetResultById(dto.id) is None

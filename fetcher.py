@@ -54,6 +54,8 @@ class Match:
 class Fetcher:
     half_time_fetch_cache = None
     full_time_fetch_cache = None
+    ht_last_min = None
+    ft_last_min = None
     repository = None
     fetch_counter = None
     
@@ -62,6 +64,8 @@ class Fetcher:
         self.fetch_counter = 1
         self.half_time_fetch_cache = []
         self.full_time_fetch_cache = []
+        self.ht_last_min = []
+        self.ft_last_min = []
         
     def FillMatchResults(self) -> None:        
         dtos = self.repository.GetResults(False)
@@ -130,6 +134,22 @@ class Fetcher:
                     queue.task_done()
                     continue
                 
+                if m.time_int >= 41 and m.is_first_half and m.id not in self.ht_last_min:
+                    header = f'{m.home_name} 對 {m.away_name} 半場最後4分鐘'
+                    body = f'目前球賽時間 {m.time_text}'
+                    toReturn.append((header, body))
+                    self.ht_last_min.append(m.id)
+                    if len(self.ht_last_min) > 5:
+                        _ = self.ht_last_min.pop(0)
+                        
+                if m.time_int >= 86 and not m.is_first_half and m.id not in self.ft_last_min:
+                    header = f'{m.home_name} 對 {m.away_name} 全場最後4分鐘'
+                    body = f'目前球賽時間 {m.time_text}'
+                    toReturn.append((header, body))
+                    self.ft_last_min.append(m.id)
+                    if len(self.ft_last_min) > 5:
+                        _ = self.ft_last_min.pop(0)
+                
                 if m.is_first_half and m.id in self.half_time_fetch_cache:
                     print(f'{str(m)}上半場已通知')
                     queue.task_done()
@@ -166,22 +186,36 @@ class Fetcher:
                 else:
                     flow = '落飛'
                 win_rate = ""
-                new_dto = ResultDto(m.id, m.time_int, odd)
-                self.repository.Upsert(new_dto)
                 
-                def GetSuccessRate(time_min :int, time_max :int, check_goalline :bool, is_first_half:bool) -> float:
-                    previous_records = self.repository.GetResults(True)
+                previous_records = self.repository.GetResults(True)
+                dto = next((x for x in previous_records if x.id == m.id), None)
+                if dto is None:
+                    new_dto = ResultDto(m.id, m.time_int, odd)
+                    self.repository.Upsert(new_dto)
+                elif not m.is_first_half:
+                    dto.ft_time = m.time_int
+                    dto.ft_odd = odd
+                    self.repository.Upsert(dto)
+                
+                def GetSuccessRate(time_min :int, time_max :int, check_goalline :bool, is_first_half:bool, prematch_odd :float = None) -> float:
                     if is_first_half:
                         if check_goalline:
-                            target_results = [x for x in previous_records if (x.ht_time <= time_max and x.ht_time >= time_min and x.ht_prematch_goalline == prematch_goal_line)]
+                            if prematch_odd is not None:
+                                target_results = [x for x in previous_records if (x.ht_time <= time_max and x.ht_time >= time_min and x.ht_prematch_goalline == prematch_goal_line and x.ht_prematch_odd >= prematch_odd - 0.09 and x.ht_prematch_odd <= prematch_odd + 0.09)]
+                            else:
+                                target_results = [x for x in previous_records if (x.ht_time <= time_max and x.ht_time >= time_min and x.ht_prematch_goalline == prematch_goal_line)]
                         else:
                             target_results = [x for x in previous_records if (x.ht_time <= time_max and x.ht_time >= time_min)]
                         success = len([x for x in target_results if x.ht_success])
                     else:
+                        filtered_records = [x for x in previous_records if (x.ft_time is not None)]
                         if check_goalline:
-                            target_results = [x for x in previous_records if (x.ft_time <= time_max and x.ft_time >= time_min and x.ft_prematch_goalline == prematch_goal_line)]
+                            if prematch_odd is not None:
+                                target_results = [x for x in filtered_records if (x.ft_time <= time_max and x.ft_time >= time_min and x.ft_prematch_goalline == prematch_goal_line and x.ft_prematch_odd >= prematch_odd - 0.09 and x.ft_prematch_odd >= prematch_odd + 0.09)]
+                            else:
+                                target_results = [x for x in filtered_records if (x.ft_time <= time_max and x.ft_time >= time_min and x.ft_prematch_goalline == prematch_goal_line)]
                         else:
-                            target_results = [x for x in previous_records if (x.ft_time <= time_max and x.ft_time >= time_min)]
+                            target_results = [x for x in filtered_records if (x.ft_time <= time_max and x.ft_time >= time_min)]
                         success = len([x for x in target_results if x.ft_success])
                     
                     total = len(target_results)
@@ -191,21 +225,30 @@ class Fetcher:
                     
                     return success/total * 100
                 
-                exact_win_rate = GetSuccessRate(m.time_int, m.time_int, False, m.is_first_half)
-                range_win_rate = GetSuccessRate(m.time_int - 2, m.time_int + 2, False, m.is_first_half)
-                goalline_before_win_rate = GetSuccessRate(0 if m.is_first_half else 46, m.time_int, True, m.is_first_half)
-                goalline_after_win_rate = GetSuccessRate(m.time_int, 45 if m.is_first_half else 90, True, m.is_first_half)
-                goalline_between_win_rate = GetSuccessRate(m.time_int - 2, m.time_int + 2, True, m.is_first_half)
-                if exact_win_rate != -1:
-                    win_rate += "\n於{time}的成功率為: {rate:.2f}%".format(time= m.time_text,rate=exact_win_rate, f=flow)
-                if range_win_rate != -1:
-                    win_rate += "\n於{time}前後2分鐘的成功率為: {rate:.2f}%".format(time= m.time_text, rate=range_win_rate, f=flow)
-                if goalline_before_win_rate != -1:
-                    win_rate += "\n中位數{goalline}球於{time}前發出的成功率: {rate:.2f}%".format(goalline=prematch_goal_line, time=m.time_text, rate=goalline_before_win_rate)
-                if goalline_after_win_rate != -1:
-                    win_rate += "\n中位數{goalline}球於{time}後發出的成功率: {rate:.2f}%".format(goalline=prematch_goal_line, time=m.time_text, rate=goalline_after_win_rate)
-                if goalline_between_win_rate != -1:
-                    win_rate += "\n中位數{goalline}球於{time}前後2分鐘發出的成功率: {rate:.2f}%".format(goalline=prematch_goal_line, time=m.time_text, rate=goalline_between_win_rate)
+                goalline_and_odd_before_win_rate = GetSuccessRate(0 if m.is_first_half else 46, m.time_int + 2, True, m.is_first_half, prematch_high_odd)
+                goalline_and_odd_after_win_rate = GetSuccessRate(m.time_int - 2, 45 if m.is_first_half else 90, True, m.is_first_half, prematch_high_odd)
+                goalline_and_odd_between_win_rate = GetSuccessRate(m.time_int - 2, m.time_int + 2, True, m.is_first_half, prematch_high_odd)
+                if goalline_and_odd_before_win_rate != -1 and goalline_and_odd_after_win_rate != -1 and goalline_and_odd_between_win_rate != -1:
+                    win_rate += "\n中位數{goalline}球 賽前賠率於{prematch_odd}+-0.09的成功率:".format(goalline=prematch_goal_line, prematch_odd = prematch_high_odd)
+                    win_rate += "\n{time}'前 - {rate:.2f}%".format(time=m.time_int + 2, rate=goalline_and_odd_before_win_rate)
+                    win_rate += "\n{time}'後 - {rate:.2f}%".format(time=m.time_int -2, rate=goalline_and_odd_after_win_rate)
+                    win_rate += "\n於{time}前後2分鐘 - {rate:.2f}%".format(time=m.time_text, rate=goalline_and_odd_between_win_rate)
+                else:
+                    goalline_before_win_rate = GetSuccessRate(0 if m.is_first_half else 46, m.time_int + 2, True, m.is_first_half)
+                    goalline_after_win_rate = GetSuccessRate(m.time_int - 2, 45 if m.is_first_half else 90, True, m.is_first_half)
+                    goalline_between_win_rate = GetSuccessRate(m.time_int - 2, m.time_int + 2, True, m.is_first_half)
+                    if goalline_before_win_rate != -1 and goalline_after_win_rate != -1 and goalline_between_win_rate != -1:
+                        win_rate += "\n中位數{goalline}球的成功率:".format(goalline=prematch_goal_line, prematch_odd = prematch_high_odd)
+                        win_rate += "\n{time}'前 - {rate:.2f}%".format(time=m.time_int + 2, rate=goalline_before_win_rate)
+                        win_rate += "\n{time}'後 - {rate:.2f}%".format(time=m.time_int -2, rate=goalline_after_win_rate)
+                        win_rate += "\n於{time}前後2分鐘 - {rate:.2f}%".format(time=m.time_text, rate=goalline_between_win_rate)
+                    else:
+                        exact_win_rate = GetSuccessRate(m.time_int, m.time_int, False, m.is_first_half)
+                        range_win_rate = GetSuccessRate(m.time_int - 2, m.time_int + 2, False, m.is_first_half)
+                        if exact_win_rate != -1:
+                            win_rate += "\n於{time}的成功率為: {rate:.2f}%".format(time= m.time_text,rate=exact_win_rate, f=flow)
+                        if range_win_rate != -1:
+                            win_rate += "\n於{time}前後2分鐘的成功率為: {rate:.2f}%".format(time= m.time_text, rate=range_win_rate, f=flow)
                 
                 header = f'{m.home_name} 對 {m.away_name} 即場0.75大有水'
                 body = f'目前球賽時間 {m.time_text}\n'
