@@ -6,8 +6,10 @@ import utils
 import time
 
 class Crawler:
-    @staticmethod
-    def GetWebsiteData(site_domain :str, site_api :str) -> requests.Response:
+    def __init__(self, loggerFactory):
+        self.logger = loggerFactory.getLogger("Crawler")
+    
+    def GetWebsiteData(self, site_domain :str, site_api :str) -> requests.Response:
         try:
             session = requests.Session()
             r = session.get(site_domain)
@@ -25,11 +27,10 @@ class Crawler:
         except ConnectionError:
             print("Connection error, retrying.")
             time.sleep(1)
-            return Crawler.GetWebsiteData(site_domain, site_api)
+            return self.GetWebsiteData(site_domain, site_api)
 
-    @staticmethod
-    def GetMatchResults(match_id:str) -> dict:
-        result = Crawler.GetWebsiteData(SiteApi.G10OAL.value, SiteApi.G10OAL_Odd_Api.value.format(match_id)).text
+    def GetMatchResults(self, match_id:str) -> dict:
+        result = self.GetWebsiteData(SiteApi.G10OAL.value, SiteApi.G10OAL_Odd_Api.value.format(match_id)).text
         soup = bs4.BeautifulSoup(result, "html.parser")
         score_board = soup.findAll('div', class_=lambda c: c == 'text-center')[1]
         to_return = {}
@@ -40,9 +41,8 @@ class Crawler:
             to_return['ft'] = utils.get_goals(ft_score)
         return to_return
         
-    @staticmethod
-    def GetPreMatchOdds(match_id:str, first_half:bool) -> dict:
-        result = Crawler.GetWebsiteData(SiteApi.G10OAL.value, SiteApi.G10OAL_Odd_Api.value.format(match_id)).text
+    def GetPreMatchOdds(self, match_id:str, first_half:bool) -> dict:
+        result = self.GetWebsiteData(SiteApi.G10OAL.value, SiteApi.G10OAL_Odd_Api.value.format(match_id)).text
         soup = bs4.BeautifulSoup(result, "html.parser")
         
         wanted_odds = {}
@@ -98,9 +98,8 @@ class Crawler:
                     
         return wanted_odds
         
-    @staticmethod
-    def GetLiveTimeOdds(match_id:str) -> float:
-        result = Crawler.GetWebsiteData(SiteApi.HKJC.value, SiteApi.HKJC_Odd_Api.value.format(match_id))
+    def GetLiveTimeOdds(self, match_id:str) -> float:
+        result = self.GetWebsiteData(SiteApi.HKJC.value, SiteApi.HKJC_Odd_Api.value.format(match_id))
         
         e = True
         trial = 1
@@ -137,7 +136,7 @@ class Crawler:
                 
                 e = True
                 trial += 1
-                result = Crawler.GetWebsiteData(SiteApi.HKJC.value, SiteApi.HKJC_Odd_Api.value.format(match_id))
+                result = self.GetWebsiteData(SiteApi.HKJC.value, SiteApi.HKJC_Odd_Api.value.format(match_id))
         return -1
 
 class SiteApi(Enum):

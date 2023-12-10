@@ -10,10 +10,11 @@ class ResultRepository:
     __cursor :pyodbc.Cursor = None
     __cache = None
     
-    def __init__(self, connection_string:str):
+    def __init__(self, connection_string:str, loggerFactory):
         conn = pyodbc.connect(connection_string)
         self.__cursor = conn.cursor()
         self.__cache = {}
+        self.__logger = loggerFactory.getLogger("Repository")
     
     def __MapToDto(self, result) -> ResultDto:
         dto = ResultDto(result.id, result.ht_time, result.ht_odd)
@@ -46,8 +47,10 @@ class ResultRepository:
     
        
     def GetResultById(self, match_id:str) -> ResultDto:
+        self.__logger.debug(f"正從資料庫取得{match_id}賽事的資料")
         result = self.__cursor.execute(SELECT_QUERY + "WHERE id = ?", match_id).fetchone()
         if result is None:
+            self.__logger.debug(f"資料庫不存在{match_id}的資料")
             return None
         
         return self.__MapToDto(result)
@@ -57,6 +60,7 @@ class ResultRepository:
         if read_from_cache and len(self.__cache) > 0:
             return list(self.__cache.values())
         
+        self.__logger.debug(f"正從資料庫取得所有賽事的資料")
         results = self.__cursor.execute(SELECT_QUERY).fetchall()
         to_return = []
         for result in results:
@@ -70,9 +74,11 @@ class ResultRepository:
         is_new = self.GetResultById(dto.id) is None
         data = self.__MapFromDto(dto)
         if is_new:
+            self.__logger.debug(f"正新增至資料庫{dto.id}賽事資料")
             self.__cursor.execute(INSERT_QUERY, data)
             self.__cursor.commit()
         else:
+            self.__logger.debug(f"正更新資料庫{dto.id}賽事資料")
             self.__cursor.execute(UPDATE_QUERY, data)
             self.__cursor.commit()
                 
