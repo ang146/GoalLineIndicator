@@ -96,19 +96,18 @@ class Fetcher:
                 if len(scores) == 0:
                     self.logger.debug(f"無法取得{dto.id}賽事賽果, 將跳過")
                     continue
-                prematch_odds = self.crawler.GetPreMatchOdds(dto.id, True)
-                ht_goalline = list(prematch_odds)[0]
+                prematch_odds = self.crawler.GetPreMatchOdds(dto.id)
+                ht_goalline = list(prematch_odds['ht'])[0]
                 dto.ht_prematch_goalline = ht_goalline
-                dto.ht_prematch_odd = prematch_odds[ht_goalline][0]
-                dto.ht_rise = prematch_odds[ht_goalline][1]
+                dto.ht_prematch_odd = prematch_odds['ht'][ht_goalline][0]
+                dto.ht_rise = prematch_odds['ht'][ht_goalline][1]
                 dto.ht_success = scores['ht'] != 0
                 self.logger.debug(f"已取得{dto.id}賽事半場賽果: 半場入球{scores['ht']}, 中位數入球{ht_goalline}, 入球大賠率{dto.ht_prematch_odd}, 賠率流向為上升{dto.ht_rise}")
                     
-                prematch_odds = self.crawler.GetPreMatchOdds(dto.id, False)
-                ft_goalline = list(prematch_odds)[0]
+                ft_goalline = list(prematch_odds['ft'])[0]
                 dto.ft_prematch_goalline = ft_goalline
-                dto.ft_prematch_odd = prematch_odds[ft_goalline][0]
-                dto.ft_rise = prematch_odds[ft_goalline][1]
+                dto.ft_prematch_odd = prematch_odds['ft'][ft_goalline][0]
+                dto.ft_rise = prematch_odds['ft'][ft_goalline][1]
                 dto.ft_success = scores['ft'] != 0
                 self.logger.debug(f"已取得{dto.id}賽事全場賽果: 全半場入球{scores['ht']}, 中位數入球{ft_goalline}, 入球大賠率{dto.ft_prematch_odd}, 賠率流向為上升{dto.ft_rise}")
                     
@@ -132,14 +131,14 @@ class Fetcher:
         toReturn = []
         
         if len(matches) == 0:
-            self.logger.debug("沒有任何賽事數據, 將閒置Thread 20分鐘")
+            self.logger.info("沒有任何賽事數據, 將閒置Thread 20分鐘")
             time.sleep(1200)
         else:            
             if all(not x.is_started for x in matches) or all(not x.is_live_match or x.is_goaled or not x.is_started for x in matches):
-                self.logger.debug("所有賽事均未開賽, 或已開賽但沒有即場或已入球, 將閒置Thread 1分鐘")
+                self.logger.info("所有賽事均未開賽, 或已開賽但沒有即場或已入球, 將閒置Thread 1分鐘")
                 time.sleep(60)
             elif all(not x.is_live_match for x in matches) or all(x.is_goaled for x in matches) or all(not x.is_live_match or x.is_goaled for x in matches):
-                self.logger.debug("所有賽事均無即場或已入球, 將閒置Thread 15分鐘")
+                self.logger.info("所有賽事均無即場或已入球, 將閒置Thread 15分鐘")
                 time.sleep(900)
         
         self.logger.debug(f'將檢查共{len(matches)}場賽事')
@@ -181,6 +180,10 @@ class Fetcher:
                     header = f'{m.home_name} 對 {m.away_name} 半場最後4分鐘'
                     body = f'目前球賽時間 {m.time_text}'
                     toReturn.append((header, body))
+                    last_min_dto = self.repository.GetResultById(m.id)
+                    if last_min_dto is not None:
+                        last_min_dto.ht_last_min = True
+                        self.repository.Upsert(last_min_dto)
                     self.ht_last_min.append(m.id)
                     if len(self.ht_last_min) > 5:
                         _ = self.ht_last_min.pop(0)
@@ -189,6 +192,10 @@ class Fetcher:
                     header = f'{m.home_name} 對 {m.away_name} 全場最後4分鐘'
                     body = f'目前球賽時間 {m.time_text}'
                     toReturn.append((header, body))
+                    last_min_dto = self.repository.GetResultById(m.id)
+                    if last_min_dto is not None:
+                        last_min_dto.ft_last_min = True
+                        self.repository.Upsert(last_min_dto)
                     self.ft_last_min.append(m.id)
                     if len(self.ft_last_min) > 5:
                         _ = self.ft_last_min.pop(0)
@@ -223,20 +230,35 @@ class Fetcher:
                     continue
                 
                 self.logger.debug(f"{m.id}賽事附合要求, 將取得賽前賠率並計算成功率")
-                prematch_odds = self.crawler.GetPreMatchOdds(m.id, m.is_first_half)
-                prematch_goal_line = list(prematch_odds)[0]
-                prematch_high_odd = prematch_odds[prematch_goal_line][0]
-                prematch_odd_flow = prematch_odds[prematch_goal_line][1]
-                if prematch_odd_flow is None:
-                    flow = '無升跌'
-                elif prematch_odd_flow:
-                    flow = '回飛'
+                prematch_odds = self.crawler.GetPreMatchOdds(m.id)
+                ht_prematch_goal_line = list(prematch_odds['ht'])[0]
+                self.logger.debug(f"{m.id}賽事賽前半場中位數 {ht_prematch_goal_line}")
+                ft_prematch_goal_line = list(prematch_odds['ft'])[0]
+                self.logger.debug(f"{m.id}賽事賽前全場中位數 {ft_prematch_goal_line}")
+                ht_prematch_high_odd = prematch_odds['ht'][ht_prematch_goal_line][0]
+                ht_prematch_odd_flow = prematch_odds['ht'][ht_prematch_goal_line][1]
+                self.logger.debug(f"{m.id}賽事賽前半場大波賠率 {ht_prematch_high_odd}")
+                ft_prematch_high_odd = prematch_odds['ft'][ft_prematch_goal_line][0]
+                ft_prematch_odd_flow = prematch_odds['ft'][ft_prematch_goal_line][1]
+                self.logger.debug(f"{m.id}賽事賽前全場大波賠率 {ft_prematch_high_odd}")
+                if m.is_first_half:
+                    if ht_prematch_odd_flow is None:
+                        flow = '無升跌'
+                    elif ht_prematch_odd_flow:
+                        flow = '回飛'
+                    else:
+                        flow = '落飛'
                 else:
-                    flow = '落飛'
-                win_rate = ""
+                    if ft_prematch_odd_flow is None:
+                        flow = '無升跌'
+                    elif ft_prematch_odd_flow:
+                        flow = '回飛'
+                    else:
+                        flow = '落飛'
+                self.logger.debug(f"{m.id}賽事賽前大波賠率為 {flow}")
                 
                 dto = self.repository.GetResultById(m.id)
-                if dto is None:
+                if dto is None and m.is_first_half:
                     self.logger.debug(f"{m.id}賽事為新增項目, 將新增至資料庫")
                     new_dto = ResultDto(m.id, m.time_int, odd)
                     self.repository.Upsert(new_dto)
@@ -246,65 +268,158 @@ class Fetcher:
                     dto.ft_odd = odd
                     self.repository.Upsert(dto)
                 
-                def GetSuccessRate(time_min :int, time_max :int, check_goalline :bool, is_first_half:bool, prematch_odd :float = None) -> float:
+                def GetSuccessRateMessage() -> str:
                     previous_records = self.repository.GetResults(True)
-                    if is_first_half:
-                        if check_goalline:
-                            if prematch_odd is not None:
-                                target_results = [x for x in previous_records if (x.ht_time <= time_max and x.ht_time >= time_min and x.ht_prematch_goalline == prematch_goal_line and x.ht_prematch_odd >= prematch_odd - 0.09 and x.ht_prematch_odd <= prematch_odd + 0.09)]
-                            else:
-                                target_results = [x for x in previous_records if (x.ht_time <= time_max and x.ht_time >= time_min and x.ht_prematch_goalline == prematch_goal_line)]
+                    
+                    match_goalline_records = [x for x in previous_records if x.ht_prematch_goalline == ht_prematch_goal_line and x.ft_prematch_goalline == ft_prematch_goal_line]
+                    win_rate_message = "資料庫相同半場及全場中位數的成功率:\n"
+                    htft_check = True
+                    
+                    if len(match_goalline_records) < 10:
+                        htft_check = False
+                        if m.is_first_half:
+                            match_goalline_records = [x for x in previous_records if x.ht_prematch_goalline == ht_prematch_goal_line]
+                            win_rate_message = "資料庫相同半場中位數的成功率:\n"
                         else:
-                            target_results = [x for x in previous_records if (x.ht_time <= time_max and x.ht_time >= time_min)]
-                        success = len([x for x in target_results if x.ht_success])
-                    else:
-                        filtered_records = [x for x in previous_records if (x.ft_time is not None)]
-                        if check_goalline:
-                            if prematch_odd is not None:
-                                target_results = [x for x in filtered_records if (x.ft_time <= time_max and x.ft_time >= time_min and x.ft_prematch_goalline == prematch_goal_line and x.ft_prematch_odd >= prematch_odd - 0.09 and x.ft_prematch_odd >= prematch_odd + 0.09)]
+                            match_goalline_records = [x for x in previous_records if x.ft_prematch_goalline == ft_prematch_goal_line]
+                            win_rate_message = "資料庫相同全場中位數的成功率:\n"
+                    
+                    if len(match_goalline_records) < 10:
+                        return ""
+                    
+                    def RecursiveWinRate(win_rate :str, time_increment:int = 0, ht_odd_increment:float = 0.0, ft_odd_increment:float = 0.0) -> (int, str):
+                        success = 0
+                        total = 0
+                        ht_odd_increment = round(ht_odd_increment, 2)
+                        ft_odd_increment = round(ft_odd_increment, 2)
+                        
+                        if htft_check:
+                            self.logger.debug(f"[{m.id}]將檢查全場半場賠率, 時間值:{time_increment}, 半場賠率值:{ht_odd_increment}, 全場賠率值:{ft_odd_increment}")
+                            if m.is_first_half:
+                                for record in match_goalline_records:
+                                    if (ht_prematch_high_odd <= record.ht_prematch_odd + ht_odd_increment and
+                                        ht_prematch_high_odd >= record.ht_prematch_odd - ht_odd_increment and
+                                        ft_prematch_high_odd <= record.ft_prematch_odd + ft_odd_increment and
+                                        ft_prematch_high_odd >= record.ft_prematch_odd - ft_odd_increment and
+                                        m.time_int <= record.ht_time + time_increment and
+                                        m.time_int >= record.ht_time - time_increment):
+                                        if record.ht_success:
+                                            success += 1
+                                        total += 1
+                                if total < 10:
+                                    if time_increment <= 3:
+                                        return RecursiveWinRate(win_rate, time_increment + 1, ht_odd_increment, ft_odd_increment)
+                                    if ft_odd_increment <= 0.1:
+                                        return RecursiveWinRate(win_rate, 0, ht_odd_increment, ft_odd_increment + 0.01)
+                                    if ht_odd_increment <= 0.1:
+                                        return RecursiveWinRate(win_rate, 0, ht_odd_increment + 0.01, 0)
+                                    return (-2, win_rate)
+                                
+                                success_rate = (success/total) * 100
+                                win_rate += f"\n賽前全場中位數: {ft_prematch_goal_line}\n"
+                                win_rate += f"通知發放時間於" + (f"{m.time_text}" if time_increment == 0 else f"{m.time_int - time_increment if m.time_int - time_increment >= 0 else 0}'至{m.time_int + time_increment}'")
+                                win_rate += "\n半場大波賠率" + (f"{ht_prematch_high_odd}" if ht_odd_increment == 0 else f"{ht_prematch_high_odd}+-{ht_odd_increment}")
+                                win_rate += "\n全場大波賠率" + (f"{ft_prematch_high_odd}" if ft_odd_increment == 0 else f"{ft_prematch_high_odd}+-{ft_odd_increment}")
+                                win_rate += f"\n成功率: {success_rate:.2f}%"
+                                
+                                return (1, win_rate)
                             else:
-                                target_results = [x for x in filtered_records if (x.ft_time <= time_max and x.ft_time >= time_min and x.ft_prematch_goalline == prematch_goal_line)]
+                                for record in match_goalline_records:
+                                    if (ht_prematch_high_odd <= record.ht_prematch_odd + ht_odd_increment and
+                                        ht_prematch_high_odd >= record.ht_prematch_odd - ht_odd_increment and
+                                        ft_prematch_high_odd <= record.ft_prematch_odd + ft_odd_increment and
+                                        ft_prematch_high_odd >= record.ft_prematch_odd - ft_odd_increment and
+                                        m.time_int <= record.ht_time + time_increment and
+                                        m.time_int >= record.ht_time - time_increment):
+                                        if record.ft_success:
+                                            success += 1
+                                        total += 1
+                                if total < 10:
+                                    if time_increment <= 3:
+                                        return RecursiveWinRate(win_rate, time_increment + 1, ht_odd_increment, ft_odd_increment)
+                                    if ht_odd_increment <= 0.1:
+                                        return RecursiveWinRate(win_rate, 0, ht_odd_increment + 0.01, ft_odd_increment)
+                                    if ft_odd_increment <= 0.1:
+                                        return RecursiveWinRate(win_rate, 0, 0, ft_odd_increment + 0.01)
+                                    return (-2, win_rate)
+                                
+                                success_rate = (success/total) * 100
+                                win_rate += f"\n賽前半場中位數: {ht_prematch_goal_line}\n"
+                                win_rate += f"通知發放時間於" + (f"{m.time_text}" if time_increment == 0 else f"{m.time_int - time_increment if m.time_int - time_increment >= 0 else 0}'至{m.time_int + time_increment}'")
+                                win_rate += "\n半場大波賠率" + (f"{ht_prematch_high_odd}" if ht_odd_increment == 0 else f"{ht_prematch_high_odd}+-{ht_odd_increment}")
+                                win_rate += "\n全場大波賠率" + (f"{ft_prematch_high_odd}" if ft_odd_increment == 0 else f"{ft_prematch_high_odd}+-{ft_odd_increment}")
+                                win_rate += f"\n成功率: {success_rate:.2f}%"
+                                
+                                return (1, win_rate)
+
                         else:
-                            target_results = [x for x in filtered_records if (x.ft_time <= time_max and x.ft_time >= time_min)]
-                        success = len([x for x in target_results if x.ft_success])
+                            if m.is_first_half:
+                                self.logger.debug(f"[{m.id}]將檢查半場賠率, 時間值:{time_increment}, 半場賠率值:{ht_odd_increment}, 全場賠率值:{ft_odd_increment}")
+                                for record in match_goalline_records:
+                                    if (ht_prematch_high_odd <= record.ht_prematch_odd + ht_odd_increment and 
+                                        ht_prematch_high_odd >= record.ht_prematch_odd - ht_odd_increment and 
+                                        m.time_int <= record.ht_time + time_increment and
+                                        m.time_int >= record.ht_time - time_increment):
+                                        if record.ht_success:
+                                            success += 1
+                                        total += 1
+                                if total < 10:
+                                    if time_increment <= 3:
+                                        return RecursiveWinRate(win_rate, time_increment + 1, ht_odd_increment, 0)
+                                    if ht_odd_increment <= 0.1:
+                                        return RecursiveWinRate(win_rate, 0, ht_odd_increment + 0.01, 0)
+                                    return (-1, win_rate)
+                            
+                                success_rate = (success/total) * 100
+                                win_rate += f"\n通知發放時間於" + (f"{m.time_text}" if time_increment == 0 else f"{m.time_int - time_increment if m.time_int - time_increment >= 0 else 0}'至{m.time_int + time_increment}'")
+                                win_rate += "\n半場大波賠率" + (f"{ht_prematch_high_odd}" if ht_odd_increment == 0 else f"{ht_prematch_high_odd}+-{ht_odd_increment}")
+                                win_rate += f"\n成功率: {success_rate:.2f}%"
+                                
+                                return (1, win_rate)
+                            else:
+                                self.logger.debug(f"[{m.id}]將檢查全場賠率, 時間值:{time_increment}, 半場賠率值:{ht_odd_increment}, 全場賠率值:{ft_odd_increment}")
+                                for record in match_goalline_records:
+                                    if (ft_prematch_high_odd <= record.ft_prematch_odd + ft_odd_increment and 
+                                        ft_prematch_high_odd >= record.ft_prematch_odd - ft_odd_increment and 
+                                        m.time_int <= record.ft_time + time_increment and
+                                        m.time_int >= record.ft_time - time_increment):
+                                        if record.ft_success:
+                                            success += 1
+                                        total += 1
+                                if total < 10:
+                                    if time_increment <= 3:
+                                        return RecursiveWinRate(win_rate, time_increment + 1, 0, ft_odd_increment)
+                                    if ft_odd_increment <= 0.1:
+                                        return RecursiveWinRate(win_rate, 0, 0, ft_odd_increment + 0.01)
+                                    return (-1, win_rate)
+                            
+                                success_rate = (success/total) * 100
+                                win_rate += f"\n通知發放時間於" + (f"{m.time_text}" if time_increment == 0 else f"{m.time_int - time_increment if m.time_int - time_increment >= 0 else 0}'至{m.time_int + time_increment}'")
+                                win_rate += "\n全場大波賠率" + (f"{ft_prematch_high_odd}" if ft_odd_increment == 0 else f"{ft_prematch_high_odd}+-{ft_odd_increment}")
+                                win_rate += f"\n成功率: {success_rate:.2f}%"
+                                
+                                return (1, win_rate)
                     
-                    total = len(target_results)
-                    
-                    if total < 10:
-                        return -1
-                    
-                    return success/total * 100
-                
-                goalline_and_odd_before_win_rate = GetSuccessRate(0 if m.is_first_half else 46, m.time_int + 2, True, m.is_first_half, prematch_high_odd)
-                goalline_and_odd_after_win_rate = GetSuccessRate(m.time_int - 2, 45 if m.is_first_half else 90, True, m.is_first_half, prematch_high_odd)
-                goalline_and_odd_between_win_rate = GetSuccessRate(m.time_int - 2, m.time_int + 2, True, m.is_first_half, prematch_high_odd)
-                if goalline_and_odd_before_win_rate != -1 and goalline_and_odd_after_win_rate != -1 and goalline_and_odd_between_win_rate != -1:
-                    win_rate += "\n中位數{goalline}球 賽前賠率於{prematch_odd}+-0.09的成功率:".format(goalline=prematch_goal_line, prematch_odd = prematch_high_odd)
-                    win_rate += "\n{time}'前 - {rate:.2f}%".format(time=m.time_int + 2, rate=goalline_and_odd_before_win_rate)
-                    win_rate += "\n{time}'後 - {rate:.2f}%".format(time=m.time_int -2, rate=goalline_and_odd_after_win_rate)
-                    win_rate += "\n於{time}前後2分鐘 - {rate:.2f}%".format(time=m.time_text, rate=goalline_and_odd_between_win_rate)
-                else:
-                    goalline_before_win_rate = GetSuccessRate(0 if m.is_first_half else 46, m.time_int + 2, True, m.is_first_half)
-                    goalline_after_win_rate = GetSuccessRate(m.time_int - 2, 45 if m.is_first_half else 90, True, m.is_first_half)
-                    goalline_between_win_rate = GetSuccessRate(m.time_int - 2, m.time_int + 2, True, m.is_first_half)
-                    if goalline_before_win_rate != -1 and goalline_after_win_rate != -1 and goalline_between_win_rate != -1:
-                        win_rate += "\n中位數{goalline}球的成功率:".format(goalline=prematch_goal_line, prematch_odd = prematch_high_odd)
-                        win_rate += "\n{time}'前 - {rate:.2f}%".format(time=m.time_int + 2, rate=goalline_before_win_rate)
-                        win_rate += "\n{time}'後 - {rate:.2f}%".format(time=m.time_int -2, rate=goalline_after_win_rate)
-                        win_rate += "\n於{time}前後2分鐘 - {rate:.2f}%".format(time=m.time_text, rate=goalline_between_win_rate)
-                    else:
-                        exact_win_rate = GetSuccessRate(m.time_int, m.time_int, False, m.is_first_half)
-                        range_win_rate = GetSuccessRate(m.time_int - 2, m.time_int + 2, False, m.is_first_half)
-                        if exact_win_rate != -1:
-                            win_rate += "\n於{time}的成功率為: {rate:.2f}%".format(time= m.time_text,rate=exact_win_rate, f=flow)
-                        if range_win_rate != -1:
-                            win_rate += "\n於{time}前後2分鐘的成功率為: {rate:.2f}%".format(time= m.time_text, rate=range_win_rate, f=flow)
-                
+                    result = RecursiveWinRate(win_rate_message)
+                    if result[0] == -2:
+                        htft_check = False
+                        if m.is_first_half:
+                            match_goalline_records = [x for x in previous_records if x.ht_prematch_goalline == ht_prematch_goal_line]
+                            win_rate_message = "資料庫相同半場中位數的成功率:\n"
+                        else:
+                            match_goalline_records = [x for x in previous_records if x.ft_prematch_goalline == ft_prematch_goal_line]
+                            win_rate_message = "資料庫相同全場中位數的成功率:\n"
+                        result = RecursiveWinRate(win_rate_message)
+                        if result[0] == -1:
+                            return ""
+                        
+                    return result[1]
+
                 header = f'{m.home_name} 對 {m.away_name} 即場0.75大有水'
                 body = f'目前球賽時間 {m.time_text}\n'
                 body += f'目前賠率: 0.5/1.0大 - {odd}\n'
-                body += f'賽前賠率: {prematch_goal_line}大 - {prematch_high_odd}, {flow}\n'
-                body += f'{win_rate}'
+                body += f'賽前賠率: {ht_prematch_goal_line if m.is_first_half else ft_prematch_goal_line}大 - {ht_prematch_high_odd if m.is_first_half else ft_prematch_high_odd}, {flow}\n'
+                body += f'{GetSuccessRateMessage()}'
                 self.logger.debug(f"{m.id}賽事將發出通知")
                 print(f'{str(m)}將發出通知')
                 toReturn.append([header, body])

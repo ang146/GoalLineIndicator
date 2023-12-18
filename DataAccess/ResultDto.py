@@ -12,6 +12,8 @@ class ResultDto:
     ft_prematch_odd = None
     ft_prematch_goalline = None
     ft_rise = None
+    ft_last_min = None
+    ht_last_min = None
     
     def __init__(self, id, ht_time, ht_odd):
         self.id = id

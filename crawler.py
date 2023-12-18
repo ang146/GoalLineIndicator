@@ -41,60 +41,58 @@ class Crawler:
             to_return['ft'] = utils.get_goals(ft_score)
         return to_return
         
-    def GetPreMatchOdds(self, match_id:str, first_half:bool) -> dict:
+    def GetPreMatchOdds(self, match_id:str) -> dict:
         result = self.GetWebsiteData(SiteApi.G10OAL.value, SiteApi.G10OAL_Odd_Api.value.format(match_id)).text
         soup = bs4.BeautifulSoup(result, "html.parser")
         
-        wanted_odds = {}
-        if first_half:
-            fhl_table = soup.find("a", {"name" : 'fhl'}).next_sibling.next_sibling.next_sibling.next_sibling
-            fhl_tbody = fhl_table.find("tbody")
-            fhl_odds = fhl_tbody.find_all("tr", class_=lambda c: c != "table-secondary")
-            check_median = 999.0
-            for odd in fhl_odds:
-                goalLines = odd.find_all("td", class_="text-center")
-                goalLine = goalLines[1].text
-                
-                highOdd = float(goalLines[0].text)
-                
-                if goalLine in wanted_odds.keys():
-                    if wanted_odds[goalLine][0] > highOdd:
-                        wanted_odds[goalLine] = (wanted_odds[goalLine][0], True)
-                    elif wanted_odds[goalLine][0] < highOdd: 
-                        wanted_odds[goalLine] = (wanted_odds[goalLine][0], False)
-                    continue
-                
-                lowOdd = float(goalLines[2].text)
-                median = abs(highOdd - lowOdd)
-                if median < check_median:
-                    check_median = median
-                    wanted_odds.clear()
-                    wanted_odds[goalLine] = (highOdd, None)
+        wanted_odds = {'ht':{}, 'ft':{}}
+        fhl_table = soup.find("a", {"name" : 'fhl'}).next_sibling.next_sibling.next_sibling.next_sibling
+        fhl_tbody = fhl_table.find("tbody")
+        fhl_odds = fhl_tbody.find_all("tr", class_=lambda c: c != "table-secondary")
+        check_median = 999.0
+        for odd in fhl_odds:
+            goalLines = odd.find_all("td", class_="text-center")
+            goalLine = goalLines[1].text
             
-        else:
-            hil_table = soup.find("a", {"name" : 'hil'}).next_sibling.next_sibling.next_sibling.next_sibling
-            hil_tbody = hil_table.find("tbody")
-            hil_odds = hil_tbody.find_all("tr", class_=lambda c: c != "table-secondary")
-            check_median = 999.0
-            for odd in hil_odds:
-                goalLines = odd.find_all("td", class_="text-center")
-                goalLine = goalLines[1].text
-                
-                highOdd = float(goalLines[0].text)
-                
-                if goalLine in wanted_odds.keys():
-                    if wanted_odds[goalLine][0] > highOdd:
-                        wanted_odds[goalLine] = (wanted_odds[goalLine][0], True)
-                    elif wanted_odds[goalLine][0] < highOdd:
-                        wanted_odds[goalLine] = (wanted_odds[goalLine][0], False)
-                    continue
-                
-                lowOdd = float(goalLines[2].text)
-                median = abs(highOdd - lowOdd)
-                if median < check_median:
-                    check_median = median
-                    wanted_odds.clear()
-                    wanted_odds[goalLine] = (highOdd, None)
+            highOdd = float(goalLines[0].text)
+            
+            if goalLine in wanted_odds['ht'].keys():
+                if wanted_odds['ht'][goalLine][0] > highOdd:
+                    wanted_odds['ht'][goalLine] = (wanted_odds['ht'][goalLine][0], True)
+                elif wanted_odds['ht'][goalLine][0] < highOdd: 
+                    wanted_odds['ht'][goalLine] = (wanted_odds['ht'][goalLine][0], False)
+                continue
+            
+            lowOdd = float(goalLines[2].text)
+            median = abs(highOdd - lowOdd)
+            if median < check_median:
+                check_median = median
+                wanted_odds['ht'].clear()
+                wanted_odds['ht'][goalLine] = (highOdd, None)
+        
+        hil_table = soup.find("a", {"name" : 'hil'}).next_sibling.next_sibling.next_sibling.next_sibling
+        hil_tbody = hil_table.find("tbody")
+        hil_odds = hil_tbody.find_all("tr", class_=lambda c: c != "table-secondary")
+        check_median = 999.0
+        for odd in hil_odds:
+            goalLines = odd.find_all("td", class_="text-center")
+            goalLine = goalLines[1].text
+            
+            highOdd = float(goalLines[0].text)
+            
+            if goalLine in wanted_odds['ft'].keys():
+                if wanted_odds['ft'][goalLine][0] > highOdd:
+                    wanted_odds['ft'][goalLine] = (wanted_odds['ft'][goalLine][0], True)
+                elif wanted_odds['ft'][goalLine][0] < highOdd:
+                    wanted_odds['ft'][goalLine] = (wanted_odds['ft'][goalLine][0], False)
+                continue
+            
+            lowOdd = float(goalLines[2].text)
+            median = abs(highOdd - lowOdd)
+            if median < check_median:
+                check_median = median
+                wanted_odds['ft'].clear()
+                wanted_odds['ft'][goalLine] = (highOdd, None)
                     
         return wanted_odds
         
@@ -129,7 +127,7 @@ class Crawler:
                 e = False
                 break
             except json.decoder.JSONDecodeError:
-                if trial > 50:
+                if trial > 20:
                     print(f"Match {match_id} was unable to retrieve. Giving up.")
                     e = False
                     break
