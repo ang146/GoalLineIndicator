@@ -116,7 +116,11 @@ class Fetcher:
     def FindMatch(self) -> List[List[str]]:
         self.logger.debug(f"進行第{self.fetch_counter}次fetching")
         print(f"進行第{self.fetch_counter}次fetching")
-        result = self.crawler.GetWebsiteData(SiteApi.G10OAL.value, SiteApi.G10OAL_Live_Mathces.value).text
+        try:
+            result = self.crawler.GetWebsiteData(SiteApi.G10OAL.value, SiteApi.G10OAL_Live_Mathces.value).text
+        except Exception as ex:
+            self.logger.debug(f"從網頁取得資料失敗, 類別: {type(ex)}, {ex}, {ex.args}")
+            return []
         soup = BeautifulSoup(result, "html.parser")
         matches_text = soup.find_all(class_="card-body")
         matches :List[Match] = []
@@ -133,13 +137,13 @@ class Fetcher:
         if len(matches) == 0:
             self.logger.info("沒有任何賽事數據, 將閒置Thread 20分鐘")
             time.sleep(1200)
-        else:            
-            if all(not x.is_started for x in matches) or all(not x.is_live_match or x.is_goaled or not x.is_started for x in matches):
-                self.logger.info("所有賽事均未開賽, 或已開賽但沒有即場或已入球, 將閒置Thread 1分鐘")
-                time.sleep(60)
-            elif all(not x.is_live_match for x in matches) or all(x.is_goaled for x in matches) or all(not x.is_live_match or x.is_goaled for x in matches):
+        else:
+            if not any(not x.is_started for x in matches) and (all(not x.is_live_match for x in matches) or all(x.is_goaled for x in matches) or all(not x.is_live_match or x.is_goaled for x in matches)):
                 self.logger.info("所有賽事均無即場或已入球, 將閒置Thread 15分鐘")
                 time.sleep(900)
+            elif all(not x.is_started for x in matches) or all(not x.is_live_match or x.is_goaled or not x.is_started for x in matches):
+                self.logger.info("所有賽事均未開賽, 或已開賽但沒有即場或已入球, 將閒置Thread 1分鐘")
+                time.sleep(60)
         
         self.logger.debug(f'將檢查共{len(matches)}場賽事')
         print(f'將檢查共{len(matches)}場賽事')
@@ -272,17 +276,17 @@ class Fetcher:
                     previous_records = self.repository.GetResults(True)
                     
                     match_goalline_records = [x for x in previous_records if x.ht_prematch_goalline == ht_prematch_goal_line and x.ft_prematch_goalline == ft_prematch_goal_line]
-                    win_rate_message = "資料庫相同半場及全場中位數的成功率:\n"
+                    win_rate_message = "\n資料庫相同半場及全場中位數的成功率:\n"
                     htft_check = True
                     
                     if len(match_goalline_records) < 10:
                         htft_check = False
                         if m.is_first_half:
                             match_goalline_records = [x for x in previous_records if x.ht_prematch_goalline == ht_prematch_goal_line]
-                            win_rate_message = "資料庫相同半場中位數的成功率:\n"
+                            win_rate_message = "\n資料庫相同半場中位數的成功率:\n"
                         else:
                             match_goalline_records = [x for x in previous_records if x.ft_prematch_goalline == ft_prematch_goal_line]
-                            win_rate_message = "資料庫相同全場中位數的成功率:\n"
+                            win_rate_message = "\n資料庫相同全場中位數的成功率:\n"
                     
                     if len(match_goalline_records) < 10:
                         return ""
@@ -307,19 +311,19 @@ class Fetcher:
                                             success += 1
                                         total += 1
                                 if total < 10:
-                                    if time_increment <= 3:
+                                    if time_increment < 2:
                                         return RecursiveWinRate(win_rate, time_increment + 1, ht_odd_increment, ft_odd_increment)
-                                    if ft_odd_increment <= 0.1:
+                                    if ft_odd_increment < 0.09:
                                         return RecursiveWinRate(win_rate, 0, ht_odd_increment, ft_odd_increment + 0.01)
-                                    if ht_odd_increment <= 0.1:
+                                    if ht_odd_increment < 0.09:
                                         return RecursiveWinRate(win_rate, 0, ht_odd_increment + 0.01, 0)
                                     return (-2, win_rate)
                                 
                                 success_rate = (success/total) * 100
-                                win_rate += f"\n賽前全場中位數: {ft_prematch_goal_line}\n"
+                                win_rate += f"賽前全場中位數: {ft_prematch_goal_line}\n"
                                 win_rate += f"通知發放時間於" + (f"{m.time_text}" if time_increment == 0 else f"{m.time_int - time_increment if m.time_int - time_increment >= 0 else 0}'至{m.time_int + time_increment}'")
-                                win_rate += "\n半場大波賠率" + (f"{ht_prematch_high_odd}" if ht_odd_increment == 0 else f"{ht_prematch_high_odd}+-{ht_odd_increment}")
-                                win_rate += "\n全場大波賠率" + (f"{ft_prematch_high_odd}" if ft_odd_increment == 0 else f"{ft_prematch_high_odd}+-{ft_odd_increment}")
+                                win_rate += "\n半場大波賠率" + (f"{ht_prematch_high_odd}" if ht_odd_increment == 0 else f"{ht_prematch_high_odd}±{ht_odd_increment}")
+                                win_rate += "\n全場大波賠率" + (f"{ft_prematch_high_odd}" if ft_odd_increment == 0 else f"{ft_prematch_high_odd}±{ft_odd_increment}")
                                 win_rate += f"\n成功率: {success_rate:.2f}%"
                                 
                                 return (1, win_rate)
@@ -335,19 +339,19 @@ class Fetcher:
                                             success += 1
                                         total += 1
                                 if total < 10:
-                                    if time_increment <= 3:
+                                    if time_increment < 2:
                                         return RecursiveWinRate(win_rate, time_increment + 1, ht_odd_increment, ft_odd_increment)
-                                    if ht_odd_increment <= 0.1:
+                                    if ht_odd_increment < 0.09:
                                         return RecursiveWinRate(win_rate, 0, ht_odd_increment + 0.01, ft_odd_increment)
-                                    if ft_odd_increment <= 0.1:
+                                    if ft_odd_increment < 0.09:
                                         return RecursiveWinRate(win_rate, 0, 0, ft_odd_increment + 0.01)
                                     return (-2, win_rate)
                                 
                                 success_rate = (success/total) * 100
-                                win_rate += f"\n賽前半場中位數: {ht_prematch_goal_line}\n"
+                                win_rate += f"賽前半場中位數: {ht_prematch_goal_line}\n"
                                 win_rate += f"通知發放時間於" + (f"{m.time_text}" if time_increment == 0 else f"{m.time_int - time_increment if m.time_int - time_increment >= 0 else 0}'至{m.time_int + time_increment}'")
-                                win_rate += "\n半場大波賠率" + (f"{ht_prematch_high_odd}" if ht_odd_increment == 0 else f"{ht_prematch_high_odd}+-{ht_odd_increment}")
-                                win_rate += "\n全場大波賠率" + (f"{ft_prematch_high_odd}" if ft_odd_increment == 0 else f"{ft_prematch_high_odd}+-{ft_odd_increment}")
+                                win_rate += "\n半場大波賠率" + (f"{ht_prematch_high_odd}" if ht_odd_increment == 0 else f"{ht_prematch_high_odd}±{ht_odd_increment}")
+                                win_rate += "\n全場大波賠率" + (f"{ft_prematch_high_odd}" if ft_odd_increment == 0 else f"{ft_prematch_high_odd}±{ft_odd_increment}")
                                 win_rate += f"\n成功率: {success_rate:.2f}%"
                                 
                                 return (1, win_rate)
@@ -364,15 +368,15 @@ class Fetcher:
                                             success += 1
                                         total += 1
                                 if total < 10:
-                                    if time_increment <= 3:
+                                    if time_increment < 2:
                                         return RecursiveWinRate(win_rate, time_increment + 1, ht_odd_increment, 0)
-                                    if ht_odd_increment <= 0.1:
+                                    if ht_odd_increment < 0.09:
                                         return RecursiveWinRate(win_rate, 0, ht_odd_increment + 0.01, 0)
                                     return (-1, win_rate)
                             
                                 success_rate = (success/total) * 100
-                                win_rate += f"\n通知發放時間於" + (f"{m.time_text}" if time_increment == 0 else f"{m.time_int - time_increment if m.time_int - time_increment >= 0 else 0}'至{m.time_int + time_increment}'")
-                                win_rate += "\n半場大波賠率" + (f"{ht_prematch_high_odd}" if ht_odd_increment == 0 else f"{ht_prematch_high_odd}+-{ht_odd_increment}")
+                                win_rate += f"通知發放時間於" + (f"{m.time_text}" if time_increment == 0 else f"{m.time_int - time_increment if m.time_int - time_increment >= 0 else 0}'至{m.time_int + time_increment}'")
+                                win_rate += "\n半場大波賠率" + (f"{ht_prematch_high_odd}" if ht_odd_increment == 0 else f"{ht_prematch_high_odd}±{ht_odd_increment}")
                                 win_rate += f"\n成功率: {success_rate:.2f}%"
                                 
                                 return (1, win_rate)
@@ -387,15 +391,15 @@ class Fetcher:
                                             success += 1
                                         total += 1
                                 if total < 10:
-                                    if time_increment <= 3:
+                                    if time_increment < 2:
                                         return RecursiveWinRate(win_rate, time_increment + 1, 0, ft_odd_increment)
-                                    if ft_odd_increment <= 0.1:
+                                    if ft_odd_increment < 0.09:
                                         return RecursiveWinRate(win_rate, 0, 0, ft_odd_increment + 0.01)
                                     return (-1, win_rate)
                             
                                 success_rate = (success/total) * 100
-                                win_rate += f"\n通知發放時間於" + (f"{m.time_text}" if time_increment == 0 else f"{m.time_int - time_increment if m.time_int - time_increment >= 0 else 0}'至{m.time_int + time_increment}'")
-                                win_rate += "\n全場大波賠率" + (f"{ft_prematch_high_odd}" if ft_odd_increment == 0 else f"{ft_prematch_high_odd}+-{ft_odd_increment}")
+                                win_rate += f"通知發放時間於" + (f"{m.time_text}" if time_increment == 0 else f"{m.time_int - time_increment if m.time_int - time_increment >= 0 else 0}'至{m.time_int + time_increment}'")
+                                win_rate += "\n全場大波賠率" + (f"{ft_prematch_high_odd}" if ft_odd_increment == 0 else f"{ft_prematch_high_odd}±{ft_odd_increment}")
                                 win_rate += f"\n成功率: {success_rate:.2f}%"
                                 
                                 return (1, win_rate)
@@ -410,8 +414,9 @@ class Fetcher:
                             match_goalline_records = [x for x in previous_records if x.ft_prematch_goalline == ft_prematch_goal_line]
                             win_rate_message = "資料庫相同全場中位數的成功率:\n"
                         result = RecursiveWinRate(win_rate_message)
-                        if result[0] == -1:
-                            return ""
+                        
+                    if result[0] == -1:
+                        return ""
                         
                     return result[1]
 
