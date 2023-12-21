@@ -139,8 +139,8 @@ class Fetcher:
             time.sleep(1200)
         else:
             if not any(not x.is_started for x in matches) and (all(not x.is_live_match for x in matches) or all(x.is_goaled for x in matches) or all(not x.is_live_match or x.is_goaled for x in matches)):
-                self.logger.info("所有賽事均無即場或已入球, 將閒置Thread 15分鐘")
-                time.sleep(900)
+                self.logger.info("所有賽事均無即場或已入球, 將閒置Thread 30分鐘")
+                time.sleep(1800)
             elif all(not x.is_started for x in matches) or all(not x.is_live_match or x.is_goaled or not x.is_started for x in matches):
                 self.logger.info("所有賽事均未開賽, 或已開賽但沒有即場或已入球, 將閒置Thread 1分鐘")
                 time.sleep(60)
@@ -383,6 +383,8 @@ class Fetcher:
                             else:
                                 self.logger.debug(f"[{m.id}]將檢查全場賠率, 時間值:{time_increment}, 半場賠率值:{ht_odd_increment}, 全場賠率值:{ft_odd_increment}")
                                 for record in match_goalline_records:
+                                    if (record.ft_time is None):
+                                        continue
                                     if (ft_prematch_high_odd <= record.ft_prematch_odd + ft_odd_increment and 
                                         ft_prematch_high_odd >= record.ft_prematch_odd - ft_odd_increment and 
                                         m.time_int <= record.ft_time + time_increment and
