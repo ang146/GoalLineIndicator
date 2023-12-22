@@ -113,9 +113,9 @@ class Fetcher:
                     
                 self.repository.Upsert(dto)
                 
-    def _SleepThread(self, message:str, time:int):
-        self.logger.info(f"{message}, 將閒置Thread {str(time)}分鐘")
-        time.sleep(time*60)
+    def _SleepThread(self, message:str, sleep_time:int):
+        self.logger.info(f"{message}, 將閒置Thread {str(sleep_time)}分鐘")
+        time.sleep(sleep_time*60)
         self.fetch_counter += 1
         
 
