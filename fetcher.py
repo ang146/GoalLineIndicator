@@ -266,7 +266,7 @@ class Fetcher:
                     self.logger.debug(f"{m.id}賽事為新增項目, 將新增至資料庫")
                     new_dto = ResultDto(m.id, m.time_int, odd)
                     self.repository.Upsert(new_dto)
-                elif not m.is_first_half:
+                elif not dto is None and not m.is_first_half:
                     self.logger.debug(f"{m.id}為下半場賽事, 將更新資料庫")
                     dto.ft_time = m.time_int
                     dto.ft_odd = odd
