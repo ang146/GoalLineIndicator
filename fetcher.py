@@ -112,6 +112,12 @@ class Fetcher:
                 self.logger.debug(f"已取得{dto.id}賽事全場賽果: 全半場入球{scores['ht']}, 中位數入球{ft_goalline}, 入球大賠率{dto.ft_prematch_odd}, 賠率流向為上升{dto.ft_rise}")
                     
                 self.repository.Upsert(dto)
+                
+    def _SleepThread(self, message:str, time:int):
+        self.logger.info(f"{message}, 將閒置Thread {str(time)}分鐘")
+        time.sleep(time*60)
+        self.fetch_counter += 1
+        
 
     def FindMatch(self) -> List[List[str]]:
         self.logger.debug(f"進行第{self.fetch_counter}次fetching")
@@ -135,15 +141,15 @@ class Fetcher:
         toReturn = []
         
         if len(matches) == 0:
-            self.logger.info("沒有任何賽事數據, 將閒置Thread 20分鐘")
-            time.sleep(1200)
+            self._SleepThread("沒有任何賽事數據", 20)
+            return toReturn
         else:
             if not any(not x.is_started for x in matches) and (all(not x.is_live_match for x in matches) or all(x.is_goaled for x in matches) or all(not x.is_live_match or x.is_goaled for x in matches)):
-                self.logger.info("所有賽事均無即場或已入球, 將閒置Thread 30分鐘")
-                time.sleep(1800)
+                self._SleepThread("所有賽事均無即場或已入球", 30)
+                return toReturn
             elif all(not x.is_started for x in matches) or all(not x.is_live_match or x.is_goaled or not x.is_started for x in matches):
-                self.logger.info("所有賽事均未開賽, 或已開賽但沒有即場或已入球, 將閒置Thread 1分鐘")
-                time.sleep(60)
+                self._SleepThread("所有賽事均未開賽, 或已開賽但沒有即場或已入球", 1)
+                return toReturn
         
         self.logger.debug(f'將檢查共{len(matches)}場賽事')
         print(f'將檢查共{len(matches)}場賽事')
