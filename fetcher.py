@@ -277,7 +277,61 @@ class Fetcher:
                     dto.ft_time = m.time_int
                     dto.ft_odd = odd
                     self.repository.Upsert(dto)
-                
+                    
+                def GetSuccessRateMessage_20240122() -> str:
+                    previous_records = self.repository.GetResults(True)
+                    win_rate = "\n資料庫相同半場及全場中位數的成功率:\n"
+                    match_goalline_records = [x for x in previous_records if x.ht_prematch_goalline == ht_prematch_goal_line and x.ft_prematch_goalline == ft_prematch_goal_line]
+                    
+                    success = 0
+                    total = 0
+                    self.logger.debug(f"[{m.id}]將檢查全場半場賠率, 時間值:{m.time_int}, 半場{ht_prematch_goal_line}賠率值:{ht_prematch_high_odd}, 全場{ft_prematch_goal_line}賠率值:{ft_prematch_high_odd}")
+                    
+                    if m.is_first_half:
+                        for record in match_goalline_records:
+                            if (ht_prematch_high_odd <= record.ht_prematch_odd + 0.15 and
+                                ht_prematch_high_odd >= record.ht_prematch_odd - 0.15 and
+                                ft_prematch_high_odd <= record.ft_prematch_odd + 0.15 and
+                                ft_prematch_high_odd >= record.ft_prematch_odd - 0.15 and
+                                m.time_int == record.ht_time):
+                                if record.ht_success:
+                                    success += 1
+                                total += 1
+                        self.logger.debug(f"[{m.id}]檢查結果: 共有{total}類似紀錄, 共{success}場成功賽事")
+                        if total >= 3:
+                            success_rate = (success/total) * 100
+                            win_rate += f"賽前全場中位數: {ft_prematch_goal_line}\n"
+                            win_rate += f"通知發放時間於{m.time_text}"
+                            win_rate += f"\n半場大波賠率{ht_prematch_high_odd}±0.15"
+                            win_rate += f"\n全場大波賠率{ft_prematch_high_odd}±0.15"
+                            win_rate += f"\n相類似{total}場賽事成功率: {success_rate:.2f}%"
+                            return win_rate
+                        else:
+                            return ""
+                    else:
+                        for record in match_goalline_records:
+                            if (ht_prematch_high_odd <= record.ht_prematch_odd + 0.15 and
+                                ht_prematch_high_odd >= record.ht_prematch_odd - 0.15 and
+                                ft_prematch_high_odd <= record.ft_prematch_odd + 0.15 and
+                                ft_prematch_high_odd >= record.ft_prematch_odd - 0.15 and
+                                m.time_int == record.ft_time):
+                                if record.ft_success:
+                                    success += 1
+                                total += 1
+                        self.logger.debug(f"[{m.id}]檢查結果: 共有{total}類似紀錄, 共{success}場成功賽事")
+                        if total >= 3:
+                            success_rate = (success/total) * 100
+                            win_rate += f"賽前全場中位數: {ft_prematch_goal_line}\n"
+                            win_rate += f"通知發放時間於{m.time_text}"
+                            win_rate += f"\n半場大波賠率{ht_prematch_high_odd}±0.15"
+                            win_rate += f"\n全場大波賠率{ft_prematch_high_odd}±0.15"
+                            win_rate += f"\n成功率: {success_rate:.2f}%"
+                            return win_rate
+                        else:
+                            return ""
+                            
+                            
+                #Obsolete    
                 def GetSuccessRateMessage() -> str:
                     previous_records = self.repository.GetResults(True)
                     
@@ -317,10 +371,10 @@ class Fetcher:
                                             success += 1
                                         total += 1
                                 if total < 10:
-                                    if time_increment < 2:
-                                        return RecursiveWinRate(win_rate, time_increment + 1, ht_odd_increment, ft_odd_increment)
-                                    if ft_odd_increment < 0.09:
-                                        return RecursiveWinRate(win_rate, 0, ht_odd_increment, ft_odd_increment + 0.01)
+                                    #if time_increment < 2:
+                                    #    return RecursiveWinRate(win_rate, time_increment + 1, ht_odd_increment, ft_odd_increment)
+                                    #if ft_odd_increment < 0.09:
+                                    #    return RecursiveWinRate(win_rate, 0, ht_odd_increment, ft_odd_increment + 0.01)
                                     if ht_odd_increment < 0.09:
                                         return RecursiveWinRate(win_rate, 0, ht_odd_increment + 0.01, 0)
                                     return (-2, win_rate)
@@ -345,10 +399,10 @@ class Fetcher:
                                             success += 1
                                         total += 1
                                 if total < 10:
-                                    if time_increment < 2:
-                                        return RecursiveWinRate(win_rate, time_increment + 1, ht_odd_increment, ft_odd_increment)
-                                    if ht_odd_increment < 0.09:
-                                        return RecursiveWinRate(win_rate, 0, ht_odd_increment + 0.01, ft_odd_increment)
+                                    #if time_increment < 2:
+                                    #    return RecursiveWinRate(win_rate, time_increment + 1, ht_odd_increment, ft_odd_increment)
+                                    #if ht_odd_increment < 0.09:
+                                    #    return RecursiveWinRate(win_rate, 0, ht_odd_increment + 0.01, ft_odd_increment)
                                     if ft_odd_increment < 0.09:
                                         return RecursiveWinRate(win_rate, 0, 0, ft_odd_increment + 0.01)
                                     return (-2, win_rate)
@@ -374,8 +428,8 @@ class Fetcher:
                                             success += 1
                                         total += 1
                                 if total < 10:
-                                    if time_increment < 2:
-                                        return RecursiveWinRate(win_rate, time_increment + 1, ht_odd_increment, 0)
+                                    #if time_increment < 2:
+                                    #    return RecursiveWinRate(win_rate, time_increment + 1, ht_odd_increment, 0)
                                     if ht_odd_increment < 0.09:
                                         return RecursiveWinRate(win_rate, 0, ht_odd_increment + 0.01, 0)
                                     return (-1, win_rate)
@@ -399,8 +453,8 @@ class Fetcher:
                                             success += 1
                                         total += 1
                                 if total < 10:
-                                    if time_increment < 2:
-                                        return RecursiveWinRate(win_rate, time_increment + 1, 0, ft_odd_increment)
+                                    #if time_increment < 2:
+                                    #    return RecursiveWinRate(win_rate, time_increment + 1, 0, ft_odd_increment)
                                     if ft_odd_increment < 0.09:
                                         return RecursiveWinRate(win_rate, 0, 0, ft_odd_increment + 0.01)
                                     return (-1, win_rate)
@@ -432,7 +486,7 @@ class Fetcher:
                 body = f'目前球賽時間 {m.time_text}\n'
                 body += f'目前賠率: 0.5/1.0大 - {odd}\n'
                 body += f'賽前賠率: {ht_prematch_goal_line if m.is_first_half else ft_prematch_goal_line}大 - {ht_prematch_high_odd if m.is_first_half else ft_prematch_high_odd}, {flow}\n'
-                body += f'{GetSuccessRateMessage()}'
+                body += f'{GetSuccessRateMessage_20240122()}'
                 self.logger.debug(f"{m.id}賽事將發出通知")
                 print(f'{str(m)}將發出通知')
                 toReturn.append([header, body])
