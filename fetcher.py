@@ -34,7 +34,9 @@ class Match:
         
         live_badge = data.find('span', class_=lambda c: "badge-danger" in c)
         self.is_live_match = live_badge != None and "即場" in live_badge.text
-        self.is_goaled = center_text.find("div", class_="lead").text != "0-0"
+        score = center_text.find("div", class_="lead")
+        if (score is not None and score.text != "0-0"):
+            self.is_goaled = True
         current_time = center_text.select_one(".text-danger").text
         if not current_time.startswith("半場"):
             self.time_text = current_time[3:]
@@ -278,21 +280,39 @@ class Fetcher:
                     dto.ft_odd = odd
                     self.repository.Upsert(dto)
                     
+                def GetOddIncrement(odd:float):
+                    if odd < 1.5:
+                        return 0.03
+                    if odd >= 1.5 and odd < 1.65:
+                        return 0.05
+                    if odd >= 1.65 and odd < 1.8:
+                        return 0.07
+                    if odd >= 1.8 and odd < 2.05:
+                        return 0.09
+                    if odd >= 2.05 and odd < 2.4:
+                        return 0.15
+                    if odd >= 2.4:
+                        return 0.2
+                    
                 def GetSuccessRateMessage_20240122() -> str:
                     previous_records = self.repository.GetResults(True)
-                    win_rate = "\n資料庫相同半場及全場中位數的成功率:\n"
+                    win_rate = "\n"
                     match_goalline_records = [x for x in previous_records if x.ht_prematch_goalline == ht_prematch_goal_line and x.ft_prematch_goalline == ft_prematch_goal_line]
                     
                     success = 0
                     total = 0
                     self.logger.debug(f"[{m.id}]將檢查全場半場賠率, 時間值:{m.time_int}, 半場{ht_prematch_goal_line}賠率值:{ht_prematch_high_odd}, 全場{ft_prematch_goal_line}賠率值:{ft_prematch_high_odd}")
                     
+                    ht_odd_increment = GetOddIncrement(ht_prematch_high_odd)
+                    ft_odd_increment = GetOddIncrement(ft_prematch_high_odd)
+                    self.logger.debug(f"[{m.id}]半場誤差值{ht_odd_increment}, 全場誤差值{ft_odd_increment}")
+                    
                     if m.is_first_half:
                         for record in match_goalline_records:
-                            if (ht_prematch_high_odd <= record.ht_prematch_odd + 0.15 and
-                                ht_prematch_high_odd >= record.ht_prematch_odd - 0.15 and
-                                ft_prematch_high_odd <= record.ft_prematch_odd + 0.15 and
-                                ft_prematch_high_odd >= record.ft_prematch_odd - 0.15 and
+                            if (ht_prematch_high_odd <= record.ht_prematch_odd + ht_odd_increment and
+                                ht_prematch_high_odd >= record.ht_prematch_odd - ht_odd_increment and
+                                ft_prematch_high_odd <= record.ft_prematch_odd + ft_odd_increment and
+                                ft_prematch_high_odd >= record.ft_prematch_odd - ft_odd_increment and
                                 m.time_int == record.ht_time):
                                 if record.ht_success:
                                     success += 1
@@ -302,18 +322,18 @@ class Fetcher:
                             success_rate = (success/total) * 100
                             win_rate += f"賽前全場中位數: {ft_prematch_goal_line}\n"
                             win_rate += f"通知發放時間於{m.time_text}"
-                            win_rate += f"\n半場大波賠率{ht_prematch_high_odd}±0.15"
-                            win_rate += f"\n全場大波賠率{ft_prematch_high_odd}±0.15"
+                            win_rate += f"\n半場大波賠率{ht_prematch_high_odd}±{ht_odd_increment}"
+                            win_rate += f"\n全場大波賠率{ft_prematch_high_odd}±{ft_odd_increment}"
                             win_rate += f"\n相類似{total}場賽事成功率: {success_rate:.2f}%"
                             return win_rate
                         else:
                             return ""
                     else:
                         for record in match_goalline_records:
-                            if (ht_prematch_high_odd <= record.ht_prematch_odd + 0.15 and
-                                ht_prematch_high_odd >= record.ht_prematch_odd - 0.15 and
-                                ft_prematch_high_odd <= record.ft_prematch_odd + 0.15 and
-                                ft_prematch_high_odd >= record.ft_prematch_odd - 0.15 and
+                            if (ht_prematch_high_odd <= record.ht_prematch_odd + ht_odd_increment and
+                                ht_prematch_high_odd >= record.ht_prematch_odd - ht_odd_increment and
+                                ft_prematch_high_odd <= record.ft_prematch_odd + ft_odd_increment and
+                                ft_prematch_high_odd >= record.ft_prematch_odd - ft_odd_increment and
                                 m.time_int == record.ft_time):
                                 if record.ft_success:
                                     success += 1
@@ -321,11 +341,11 @@ class Fetcher:
                         self.logger.debug(f"[{m.id}]檢查結果: 共有{total}類似紀錄, 共{success}場成功賽事")
                         if total >= 3:
                             success_rate = (success/total) * 100
-                            win_rate += f"賽前全場中位數: {ft_prematch_goal_line}\n"
+                            win_rate += f"賽前半場中位數: {ht_prematch_goal_line}\n"
                             win_rate += f"通知發放時間於{m.time_text}"
-                            win_rate += f"\n半場大波賠率{ht_prematch_high_odd}±0.15"
-                            win_rate += f"\n全場大波賠率{ft_prematch_high_odd}±0.15"
-                            win_rate += f"\n成功率: {success_rate:.2f}%"
+                            win_rate += f"\n半場大波賠率{ht_prematch_high_odd}±{ht_odd_increment}"
+                            win_rate += f"\n全場大波賠率{ft_prematch_high_odd}±{ft_odd_increment}"
+                            win_rate += f"\n相類似{total}場賽事成功率: {success_rate:.2f}%"
                             return win_rate
                         else:
                             return ""

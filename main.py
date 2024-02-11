@@ -27,11 +27,11 @@ async def SendNotificationToTelegramAsync():
     results = fetcher.FindMatch()
     logger.debug(f"需發通知場次數 {len(results)}")
     print(f"[{GetCurrentTime()}]需發通知場次數 {len(results)}")
+    fetching = False
     for result in results:
         msg = result[0] + '\n' + result[1]
         bot = telegram.Bot(token='6053673668:AAGqaWrfrALlOF6XT7g2aNfONW7jjyXFRZk')
         await bot.send_message(-1002143736198, text=msg)
-    fetching = False
         
 def threading_results_fetch():
     logger.debug("正在取得完場賽事資料")
