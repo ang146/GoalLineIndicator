@@ -143,6 +143,7 @@ class SiteApi(Enum):
     G10OAL_Odd_Api = '/match/{0}/odds'
     HKJC = 'http://bet.hkjc.com'
     HKJC_Odd_Api = '/football/getJSON.aspx?jsontype=odds_allodds.aspx&matchid={0}'
+    HK33 = 'https://goal.hk33.com'
 
 if __name__ == "__main__":
     #print(Crawler.GetMatchResults('50023119'))
@@ -151,4 +152,5 @@ if __name__ == "__main__":
     #print(Crawler.GetPreMatchOdds('50023119', False))
     #print(Crawler.GetPreMatchOdds('50015924', False))
     #print(Crawler.GetPreMatchOdds('50015710', False))
-    print(Crawler.GetLiveTimeOdds('50020760'))
+    #print(Crawler.GetLiveTimeOdds('50020760'))
+    print(type(SiteApi.HKJC.name))

@@ -21,36 +21,39 @@ class Match:
     is_live_match = None
     date = None
         
-    def __init__(self, data :Tag):
-        center_text = data.select_one(".text-center")
-        self.home_name = utils.trim_string(data.find("div", class_=lambda c: "text-right" in c).text)
-        self.away_name = utils.trim_string(data.find("div", class_=lambda c: "text-left" in c).text)
-        self.id = data.find("a", href=True)['href'][7:-8]
-        self.date = self._convert_string_to_datetime(data.find("h6", class_=lambda c: "text-muted" in c).find('small').text[:-6])
-        if "未開賽" in center_text.text:
-            self.is_started = False
-            return
-        self.is_started = True
-        
-        live_badge = data.find('span', class_=lambda c: "badge-danger" in c)
-        self.is_live_match = live_badge != None and "即場" in live_badge.text
-        score = center_text.find("div", class_="lead")
-        if (score is not None and score.text != "0-0"):
-            self.is_goaled = True
-        current_time = center_text.select_one(".text-danger").text
-        if not current_time.startswith("半場"):
-            self.time_text = current_time[3:]
-            if len(current_time) > 6:
-                if (current_time[3:].startswith("4") or current_time[3].startswith("5")):
-                    self.time_int = 45
-                else:
-                    self.time_int = 90
-            else:
-                self.time_int = int(current_time[3:-1])
+    def __init__(self, data :Tag, data_site:str):
+        if data_site == SiteApi.HK33.name:
+            pass
         else:
-            self.time_text = "半場"
-            self.time_int = 46
-        self.is_first_half = self.time_int <= 45
+            center_text = data.select_one(".text-center")
+            self.home_name = utils.trim_string(data.find("div", class_=lambda c: "text-right" in c).text)
+            self.away_name = utils.trim_string(data.find("div", class_=lambda c: "text-left" in c).text)
+            self.id = data.find("a", href=True)['href'][7:-8]
+            self.date = self._convert_string_to_datetime(data.find("h6", class_=lambda c: "text-muted" in c).find('small').text[:-6])
+            if "未開賽" in center_text.text:
+                self.is_started = False
+                return
+            self.is_started = True
+            
+            live_badge = data.find('span', class_=lambda c: "badge-danger" in c)
+            self.is_live_match = live_badge != None and "即場" in live_badge.text
+            score = center_text.find("div", class_="lead")
+            if (score is not None and score.text != "0-0"):
+                self.is_goaled = True
+            current_time = center_text.select_one(".text-danger").text
+            if not current_time.startswith("半場"):
+                self.time_text = current_time[3:]
+                if len(current_time) > 6:
+                    if (current_time[3:].startswith("4") or current_time[3].startswith("5")):
+                        self.time_int = 45
+                    else:
+                        self.time_int = 90
+                else:
+                    self.time_int = int(current_time[3:-1])
+            else:
+                self.time_text = "半場"
+                self.time_int = 46
+            self.is_first_half = self.time_int <= 45
         
     def _convert_string_to_datetime(self, month_day_string):
         # Get today's date
@@ -94,6 +97,7 @@ class Fetcher:
         for dto in dtos:
             if dto.ft_success is None or dto.ht_success is None:
                 self.logger.debug(f"{dto.id}紀錄未齊全, 將補完賽事")
+                #print(f"{dto.id}紀錄未齊全, 將補完賽事")
                 scores = self.crawler.GetMatchResults(dto.id)
                 if len(scores) == 0:
                     self.logger.debug(f"無法取得{dto.id}賽事賽果, 將跳過")
@@ -103,23 +107,24 @@ class Fetcher:
                 dto.ht_prematch_goalline = ht_goalline
                 dto.ht_prematch_odd = prematch_odds['ht'][ht_goalline][0]
                 dto.ht_rise = prematch_odds['ht'][ht_goalline][1]
-                dto.ht_success = scores['ht'] != 0
+                dto.ht_success = scores['ht']
                 self.logger.debug(f"已取得{dto.id}賽事半場賽果: 半場入球{scores['ht']}, 中位數入球{ht_goalline}, 入球大賠率{dto.ht_prematch_odd}, 賠率流向為上升{dto.ht_rise}")
-                    
+                #print(f"已取得{dto.id}賽事半場賽果: 半場入球{scores['ht']}, 中位數入球{ht_goalline}, 入球大賠率{dto.ht_prematch_odd}, 賠率流向為上升{dto.ht_rise}")
+                
                 ft_goalline = list(prematch_odds['ft'])[0]
                 dto.ft_prematch_goalline = ft_goalline
                 dto.ft_prematch_odd = prematch_odds['ft'][ft_goalline][0]
                 dto.ft_rise = prematch_odds['ft'][ft_goalline][1]
-                dto.ft_success = scores['ft'] != 0
-                self.logger.debug(f"已取得{dto.id}賽事全場賽果: 全半場入球{scores['ht']}, 中位數入球{ft_goalline}, 入球大賠率{dto.ft_prematch_odd}, 賠率流向為上升{dto.ft_rise}")
-                    
+                dto.ft_success = scores['ft']
+                self.logger.debug(f"已取得{dto.id}賽事全場賽果: 全半場入球{scores['ft']}, 中位數入球{ft_goalline}, 入球大賠率{dto.ft_prematch_odd}, 賠率流向為上升{dto.ft_rise}")
+                #print(f"已取得{dto.id}賽事全場賽果: 全半場入球{scores['ft']}, 中位數入球{ft_goalline}, 入球大賠率{dto.ft_prematch_odd}, 賠率流向為上升{dto.ft_rise}")
+                
                 self.repository.Upsert(dto)
                 
     def _SleepThread(self, message:str, sleep_time:int):
         self.logger.info(f"{message}, 將閒置Thread {str(sleep_time)}分鐘")
         time.sleep(sleep_time*60)
         self.fetch_counter += 1
-        
 
     def FindMatch(self) -> List[List[str]]:
         self.logger.debug(f"進行第{self.fetch_counter}次fetching")
@@ -168,6 +173,112 @@ class Fetcher:
             
         self.fetch_counter += 1
         return toReturn
+    
+    def __getOddIncrement(self, odd:float):
+        if odd < 1.5:
+            return 0.03
+        if odd >= 1.5 and odd < 1.65:
+            return 0.05
+        if odd >= 1.65 and odd < 1.8:
+            return 0.07
+        if odd >= 1.8 and odd < 2.05:
+            return 0.09
+        if odd >= 2.05 and odd < 2.4:
+            return 0.15
+        if odd >= 2.4:
+            return 0.2
+    
+    def __getSuccessRateMessage_20240122(self, match :Match, ht_line, ht_odd:float, ft_line, ft_odd:float) -> str:
+        previous_records = self.repository.GetResults(True)
+        win_rate = "\n"
+        match_goalline_records = [x for x in previous_records if x.ht_prematch_goalline == ht_line and x.ft_prematch_goalline == ft_line]
+        
+        success = 0
+        two_ball_success = 0
+        total = 0
+        self.logger.debug(f"[{match.id}]將檢查全場半場賠率, 時間值:{match.time_int}, 半場{ht_line}賠率值:{ht_odd}, 全場{ft_line}賠率值:{ft_odd}")
+        
+        ht_odd_increment = self.__getOddIncrement(ht_odd)
+        ft_odd_increment = self.__getOddIncrement(ft_odd)
+        self.logger.debug(f"[{match.id}]半場誤差值{ht_odd_increment}, 全場誤差值{ft_odd_increment}")
+        
+        if match.is_first_half:
+            for record in match_goalline_records:
+                if (ht_odd <= record.ht_prematch_odd + ht_odd_increment and
+                    ht_odd >= record.ht_prematch_odd - ht_odd_increment and
+                    ft_odd <= record.ft_prematch_odd + ft_odd_increment and
+                    ft_odd >= record.ft_prematch_odd - ft_odd_increment and
+                    match.time_int == record.ht_time):
+                    if record.ht_success > 0:
+                        success += 1
+                    if record.ht_success > 1:
+                        two_ball_success += 1
+                        
+                    total += 1
+            self.logger.debug(f"[{match.id}]檢查結果: 共有{total}類似紀錄, 共{success}場成功賽事")
+        
+        else:
+            for record in match_goalline_records:
+                if (ht_odd <= record.ht_prematch_odd + ht_odd_increment and
+                    ht_odd >= record.ht_prematch_odd - ht_odd_increment and
+                    ft_odd <= record.ft_prematch_odd + ft_odd_increment and
+                    ft_odd >= record.ft_prematch_odd - ft_odd_increment and
+                    match.time_int == record.ft_time):
+                    if record.ft_success > 0:
+                        success += 1
+                    if record.ft_success > 1:
+                        two_ball_success += 1
+                    total += 1
+            self.logger.debug(f"[{match.id}]檢查結果: 共有{total}類似紀錄, 共{success}場成功賽事")
+            
+        if total < 4:
+            return ""
+        
+        success_rate = (success/total) * 100
+        two_ball_success_rate = (two_ball_success/total) * 100
+        win_rate += f"賽前{'半' if match.is_first_half else '全'}場中位數: {ht_line if match.is_first_half else ft_line}\n"
+        win_rate += f"通知發放時間於{match.time_text}"
+        win_rate += f"\n半場大波賠率{ht_odd}±{ht_odd_increment}"
+        win_rate += f"\n全場大波賠率{ft_odd}±{ft_odd_increment}"
+        win_rate += f"\n相類似{total}場賽事有1球機會: {success_rate:.2f}%"
+        win_rate += f"\n有2球機會: {two_ball_success_rate:.2f}%"
+        
+        dto = self.repository.GetResultById(match.id)
+        if dto is not None:
+            if match.is_first_half:
+                dto.ht_prob = success_rate
+            else:
+                dto.ft_prob = success_rate
+            self.repository.Upsert(dto)
+            
+        recent_days = 3
+        self.logger.debug(f"檢查最近{recent_days}日已紀錄場次可靠程度")
+        recent_matches = [x for x in previous_records if x.match_date is not None and (match.date.date() - x.match_date.date()).days <= recent_days]
+        
+        reliable = 0
+        reliable_total = 0
+        for recent_match in recent_matches:
+            if recent_match.ht_prob is not None:
+                if (recent_match.ht_prob > 50 and recent_match.ht_success) or (recent_match.ht_prob < 50 and not recent_match.ht_success):
+                    reliable += 1
+                if recent_match.ht_prob != 50:
+                    reliable_total += 1
+            if recent_match.ft_prob is not None:
+                if (recent_match.ft_prob > 50 and recent_match.ft_success) or (recent_match.ft_prob < 50 and not recent_match.ft_success):
+                    reliable += 1
+                if recent_match.ft_prob != 50:
+                    reliable_total += 1
+                
+        self.logger.debug(f"共有{reliable_total}場有效場次, 可靠場次有{reliable}場")
+        
+        if reliable_total < 4:
+            return win_rate
+                
+        reliable_rate = (reliable / reliable_total) * 100
+        self.logger.debug(f"近{recent_days}日牙bot預測可靠程度:{reliable_rate}%")
+        win_rate += f"\n近{recent_days}日牙bot預測可靠程度:{reliable_rate}%"
+            
+        return win_rate
     
     def __findmatch(self, queue: queue.Queue, toReturn:list):
         try:
@@ -273,240 +384,19 @@ class Fetcher:
                 if dto is None and m.is_first_half:
                     self.logger.debug(f"{m.id}賽事為新增項目, 將新增至資料庫")
                     new_dto = ResultDto(m.id, m.time_int, odd)
+                    new_dto.match_date = m.date
                     self.repository.Upsert(new_dto)
                 elif not dto is None and not m.is_first_half:
                     self.logger.debug(f"{m.id}為下半場賽事, 將更新資料庫")
                     dto.ft_time = m.time_int
                     dto.ft_odd = odd
                     self.repository.Upsert(dto)
-                    
-                def GetOddIncrement(odd:float):
-                    if odd < 1.5:
-                        return 0.03
-                    if odd >= 1.5 and odd < 1.65:
-                        return 0.05
-                    if odd >= 1.65 and odd < 1.8:
-                        return 0.07
-                    if odd >= 1.8 and odd < 2.05:
-                        return 0.09
-                    if odd >= 2.05 and odd < 2.4:
-                        return 0.15
-                    if odd >= 2.4:
-                        return 0.2
-                    
-                def GetSuccessRateMessage_20240122() -> str:
-                    previous_records = self.repository.GetResults(True)
-                    win_rate = "\n"
-                    match_goalline_records = [x for x in previous_records if x.ht_prematch_goalline == ht_prematch_goal_line and x.ft_prematch_goalline == ft_prematch_goal_line]
-                    
-                    success = 0
-                    total = 0
-                    self.logger.debug(f"[{m.id}]將檢查全場半場賠率, 時間值:{m.time_int}, 半場{ht_prematch_goal_line}賠率值:{ht_prematch_high_odd}, 全場{ft_prematch_goal_line}賠率值:{ft_prematch_high_odd}")
-                    
-                    ht_odd_increment = GetOddIncrement(ht_prematch_high_odd)
-                    ft_odd_increment = GetOddIncrement(ft_prematch_high_odd)
-                    self.logger.debug(f"[{m.id}]半場誤差值{ht_odd_increment}, 全場誤差值{ft_odd_increment}")
-                    
-                    if m.is_first_half:
-                        for record in match_goalline_records:
-                            if (ht_prematch_high_odd <= record.ht_prematch_odd + ht_odd_increment and
-                                ht_prematch_high_odd >= record.ht_prematch_odd - ht_odd_increment and
-                                ft_prematch_high_odd <= record.ft_prematch_odd + ft_odd_increment and
-                                ft_prematch_high_odd >= record.ft_prematch_odd - ft_odd_increment and
-                                m.time_int == record.ht_time):
-                                if record.ht_success:
-                                    success += 1
-                                total += 1
-                        self.logger.debug(f"[{m.id}]檢查結果: 共有{total}類似紀錄, 共{success}場成功賽事")
-                        if total >= 3:
-                            success_rate = (success/total) * 100
-                            win_rate += f"賽前全場中位數: {ft_prematch_goal_line}\n"
-                            win_rate += f"通知發放時間於{m.time_text}"
-                            win_rate += f"\n半場大波賠率{ht_prematch_high_odd}±{ht_odd_increment}"
-                            win_rate += f"\n全場大波賠率{ft_prematch_high_odd}±{ft_odd_increment}"
-                            win_rate += f"\n相類似{total}場賽事成功率: {success_rate:.2f}%"
-                            return win_rate
-                        else:
-                            return ""
-                    else:
-                        for record in match_goalline_records:
-                            if (ht_prematch_high_odd <= record.ht_prematch_odd + ht_odd_increment and
-                                ht_prematch_high_odd >= record.ht_prematch_odd - ht_odd_increment and
-                                ft_prematch_high_odd <= record.ft_prematch_odd + ft_odd_increment and
-                                ft_prematch_high_odd >= record.ft_prematch_odd - ft_odd_increment and
-                                m.time_int == record.ft_time):
-                                if record.ft_success:
-                                    success += 1
-                                total += 1
-                        self.logger.debug(f"[{m.id}]檢查結果: 共有{total}類似紀錄, 共{success}場成功賽事")
-                        if total >= 3:
-                            success_rate = (success/total) * 100
-                            win_rate += f"賽前半場中位數: {ht_prematch_goal_line}\n"
-                            win_rate += f"通知發放時間於{m.time_text}"
-                            win_rate += f"\n半場大波賠率{ht_prematch_high_odd}±{ht_odd_increment}"
-                            win_rate += f"\n全場大波賠率{ft_prematch_high_odd}±{ft_odd_increment}"
-                            win_rate += f"\n相類似{total}場賽事成功率: {success_rate:.2f}%"
-                            return win_rate
-                        else:
-                            return ""
                             
-                            
-                #Obsolete    
-                def GetSuccessRateMessage() -> str:
-                    previous_records = self.repository.GetResults(True)
-                    
-                    match_goalline_records = [x for x in previous_records if x.ht_prematch_goalline == ht_prematch_goal_line and x.ft_prematch_goalline == ft_prematch_goal_line]
-                    win_rate_message = "\n資料庫相同半場及全場中位數的成功率:\n"
-                    htft_check = True
-                    
-                    if len(match_goalline_records) < 10:
-                        htft_check = False
-                        if m.is_first_half:
-                            match_goalline_records = [x for x in previous_records if x.ht_prematch_goalline == ht_prematch_goal_line]
-                            win_rate_message = "\n資料庫相同半場中位數的成功率:\n"
-                        else:
-                            match_goalline_records = [x for x in previous_records if x.ft_prematch_goalline == ft_prematch_goal_line]
-                            win_rate_message = "\n資料庫相同全場中位數的成功率:\n"
-                    
-                    if len(match_goalline_records) < 10:
-                        return ""
-                    
-                    def RecursiveWinRate(win_rate :str, time_increment:int = 0, ht_odd_increment:float = 0.0, ft_odd_increment:float = 0.0) -> (int, str):
-                        success = 0
-                        total = 0
-                        ht_odd_increment = round(ht_odd_increment, 2)
-                        ft_odd_increment = round(ft_odd_increment, 2)
-                        
-                        if htft_check:
-                            self.logger.debug(f"[{m.id}]將檢查全場半場賠率, 時間值:{time_increment}, 半場賠率值:{ht_odd_increment}, 全場賠率值:{ft_odd_increment}")
-                            if m.is_first_half:
-                                for record in match_goalline_records:
-                                    if (ht_prematch_high_odd <= record.ht_prematch_odd + ht_odd_increment and
-                                        ht_prematch_high_odd >= record.ht_prematch_odd - ht_odd_increment and
-                                        ft_prematch_high_odd <= record.ft_prematch_odd + ft_odd_increment and
-                                        ft_prematch_high_odd >= record.ft_prematch_odd - ft_odd_increment and
-                                        m.time_int <= record.ht_time + time_increment and
-                                        m.time_int >= record.ht_time - time_increment):
-                                        if record.ht_success:
-                                            success += 1
-                                        total += 1
-                                if total < 10:
-                                    #if time_increment < 2:
-                                    #    return RecursiveWinRate(win_rate, time_increment + 1, ht_odd_increment, ft_odd_increment)
-                                    #if ft_odd_increment < 0.09:
-                                    #    return RecursiveWinRate(win_rate, 0, ht_odd_increment, ft_odd_increment + 0.01)
-                                    if ht_odd_increment < 0.09:
-                                        return RecursiveWinRate(win_rate, 0, ht_odd_increment + 0.01, 0)
-                                    return (-2, win_rate)
-                                
-                                success_rate = (success/total) * 100
-                                win_rate += f"賽前全場中位數: {ft_prematch_goal_line}\n"
-                                win_rate += f"通知發放時間於" + (f"{m.time_text}" if time_increment == 0 else f"{m.time_int - time_increment if m.time_int - time_increment >= 0 else 0}'至{m.time_int + time_increment}'")
-                                win_rate += "\n半場大波賠率" + (f"{ht_prematch_high_odd}" if ht_odd_increment == 0 else f"{ht_prematch_high_odd}±{ht_odd_increment}")
-                                win_rate += "\n全場大波賠率" + (f"{ft_prematch_high_odd}" if ft_odd_increment == 0 else f"{ft_prematch_high_odd}±{ft_odd_increment}")
-                                win_rate += f"\n成功率: {success_rate:.2f}%"
-                                
-                                return (1, win_rate)
-                            else:
-                                for record in match_goalline_records:
-                                    if (ht_prematch_high_odd <= record.ht_prematch_odd + ht_odd_increment and
-                                        ht_prematch_high_odd >= record.ht_prematch_odd - ht_odd_increment and
-                                        ft_prematch_high_odd <= record.ft_prematch_odd + ft_odd_increment and
-                                        ft_prematch_high_odd >= record.ft_prematch_odd - ft_odd_increment and
-                                        m.time_int <= record.ht_time + time_increment and
-                                        m.time_int >= record.ht_time - time_increment):
-                                        if record.ft_success:
-                                            success += 1
-                                        total += 1
-                                if total < 10:
-                                    #if time_increment < 2:
-                                    #    return RecursiveWinRate(win_rate, time_increment + 1, ht_odd_increment, ft_odd_increment)
-                                    #if ht_odd_increment < 0.09:
-                                    #    return RecursiveWinRate(win_rate, 0, ht_odd_increment + 0.01, ft_odd_increment)
-                                    if ft_odd_increment < 0.09:
-                                        return RecursiveWinRate(win_rate, 0, 0, ft_odd_increment + 0.01)
-                                    return (-2, win_rate)
-                                
-                                success_rate = (success/total) * 100
-                                win_rate += f"賽前半場中位數: {ht_prematch_goal_line}\n"
-                                win_rate += f"通知發放時間於" + (f"{m.time_text}" if time_increment == 0 else f"{m.time_int - time_increment if m.time_int - time_increment >= 0 else 0}'至{m.time_int + time_increment}'")
-                                win_rate += "\n半場大波賠率" + (f"{ht_prematch_high_odd}" if ht_odd_increment == 0 else f"{ht_prematch_high_odd}±{ht_odd_increment}")
-                                win_rate += "\n全場大波賠率" + (f"{ft_prematch_high_odd}" if ft_odd_increment == 0 else f"{ft_prematch_high_odd}±{ft_odd_increment}")
-                                win_rate += f"\n成功率: {success_rate:.2f}%"
-                                
-                                return (1, win_rate)
-
-                        else:
-                            if m.is_first_half:
-                                self.logger.debug(f"[{m.id}]將檢查半場賠率, 時間值:{time_increment}, 半場賠率值:{ht_odd_increment}, 全場賠率值:{ft_odd_increment}")
-                                for record in match_goalline_records:
-                                    if (ht_prematch_high_odd <= record.ht_prematch_odd + ht_odd_increment and 
-                                        ht_prematch_high_odd >= record.ht_prematch_odd - ht_odd_increment and 
-                                        m.time_int <= record.ht_time + time_increment and
-                                        m.time_int >= record.ht_time - time_increment):
-                                        if record.ht_success:
-                                            success += 1
-                                        total += 1
-                                if total < 10:
-                                    #if time_increment < 2:
-                                    #    return RecursiveWinRate(win_rate, time_increment + 1, ht_odd_increment, 0)
-                                    if ht_odd_increment < 0.09:
-                                        return RecursiveWinRate(win_rate, 0, ht_odd_increment + 0.01, 0)
-                                    return (-1, win_rate)
-                            
-                                success_rate = (success/total) * 100
-                                win_rate += f"通知發放時間於" + (f"{m.time_text}" if time_increment == 0 else f"{m.time_int - time_increment if m.time_int - time_increment >= 0 else 0}'至{m.time_int + time_increment}'")
-                                win_rate += "\n半場大波賠率" + (f"{ht_prematch_high_odd}" if ht_odd_increment == 0 else f"{ht_prematch_high_odd}±{ht_odd_increment}")
-                                win_rate += f"\n成功率: {success_rate:.2f}%"
-                                
-                                return (1, win_rate)
-                            else:
-                                self.logger.debug(f"[{m.id}]將檢查全場賠率, 時間值:{time_increment}, 半場賠率值:{ht_odd_increment}, 全場賠率值:{ft_odd_increment}")
-                                for record in match_goalline_records:
-                                    if (record.ft_time is None):
-                                        continue
-                                    if (ft_prematch_high_odd <= record.ft_prematch_odd + ft_odd_increment and 
-                                        ft_prematch_high_odd >= record.ft_prematch_odd - ft_odd_increment and 
-                                        m.time_int <= record.ft_time + time_increment and
-                                        m.time_int >= record.ft_time - time_increment):
-                                        if record.ft_success:
-                                            success += 1
-                                        total += 1
-                                if total < 10:
-                                    #if time_increment < 2:
-                                    #    return RecursiveWinRate(win_rate, time_increment + 1, 0, ft_odd_increment)
-                                    if ft_odd_increment < 0.09:
-                                        return RecursiveWinRate(win_rate, 0, 0, ft_odd_increment + 0.01)
-                                    return (-1, win_rate)
-                            
-                                success_rate = (success/total) * 100
-                                win_rate += f"通知發放時間於" + (f"{m.time_text}" if time_increment == 0 else f"{m.time_int - time_increment if m.time_int - time_increment >= 0 else 0}'至{m.time_int + time_increment}'")
-                                win_rate += "\n全場大波賠率" + (f"{ft_prematch_high_odd}" if ft_odd_increment == 0 else f"{ft_prematch_high_odd}±{ft_odd_increment}")
-                                win_rate += f"\n成功率: {success_rate:.2f}%"
-                                
-                                return (1, win_rate)
-                    
-                    result = RecursiveWinRate(win_rate_message)
-                    if result[0] == -2:
-                        htft_check = False
-                        if m.is_first_half:
-                            match_goalline_records = [x for x in previous_records if x.ht_prematch_goalline == ht_prematch_goal_line]
-                            win_rate_message = "資料庫相同半場中位數的成功率:\n"
-                        else:
-                            match_goalline_records = [x for x in previous_records if x.ft_prematch_goalline == ft_prematch_goal_line]
-                            win_rate_message = "資料庫相同全場中位數的成功率:\n"
-                        result = RecursiveWinRate(win_rate_message)
-                        
-                    if result[0] == -1:
-                        return ""
-                        
-                    return result[1]
-
                 header = f'{m.home_name} 對 {m.away_name} 即場0.75大有水'
                 body = f'目前球賽時間 {m.time_text}\n'
                 body += f'目前賠率: 0.5/1.0大 - {odd}\n'
                 body += f'賽前賠率: {ht_prematch_goal_line if m.is_first_half else ft_prematch_goal_line}大 - {ht_prematch_high_odd if m.is_first_half else ft_prematch_high_odd}, {flow}\n'
-                body += f'{GetSuccessRateMessage_20240122()}'
+                body += f'{self.__getSuccessRateMessage_20240122(m, ht_prematch_goal_line, ht_prematch_high_odd, ft_prematch_goal_line, ft_prematch_high_odd)}'
                 self.logger.debug(f"{m.id}賽事將發出通知")
                 print(f'{str(m)}將發出通知')
                 toReturn.append([header, body])
@@ -534,17 +424,30 @@ if __name__ == "__main__":
     loggerFact = LoggerFactory()
     crawler = Crawler(loggerFact)
     
-    result = crawler.GetWebsiteData("http://g10oal.com", "/live").text
-    soup = BeautifulSoup(result, "html.parser")
-    matches = soup.find_all(class_="card-body")
-    m = Match(matches[0])
-    print('主隊 ' + m.home_name)
-    print('客隊 '+ m.away_name)
-    print('Id ' + m.id)
+    DRIVER_NAME = 'SQL SERVER'
+    CONNECTION_STRING = f"""
+        DRIVER={{{DRIVER_NAME}}};
+        SERVER={SERVER_NAME};
+        DATABASE={DATABASE_NAME};
+        PORT=49172;
+        Trust_Connection=yes;
+        uid={USER_NAME};
+        pwd={PASSWORD};
+    """
+    fetcher = Fetcher(CONNECTION_STRING, loggerFact)
+    fetcher.FillMatchResults()
+    
+    #result = crawler.GetWebsiteData("http://g10oal.com", "/live").text
+    #soup = BeautifulSoup(result, "html.parser")
+    #matches = soup.find_all(class_="card-body")
+    #m = Match(matches[0])
+    #print('主隊 ' + m.home_name)
+    #print('客隊 '+ m.away_name)
+    #print('Id ' + m.id)
     #print('時間(int) ' + str(m.time_int))
     #print('時間 ' + m.time_text)
-    print('開咗場 ' + str(m.is_started))
+    #print('開咗場 ' + str(m.is_started))
     #print('入咗波 ' + str(m.is_goaled))
     #print('有即場 ' + str(m.is_live_match))
     #print('上半場 ' + str(m.is_first_half))
-    print('日期' + str(m.date))
+    #print('日期' + str(m.date))

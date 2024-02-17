@@ -1,3 +1,5 @@
+from datetime import datetime
+
 class ResultDto:
     id = None
     ht_time = None
@@ -14,6 +16,9 @@ class ResultDto:
     ft_rise = None
     ft_last_min = None
     ht_last_min = None
+    match_date :datetime = None
+    ht_prob = None
+    ft_prob = None
     
     def __init__(self, id, ht_time, ht_odd):
         self.id = id

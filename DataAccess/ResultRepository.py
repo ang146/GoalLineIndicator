@@ -2,9 +2,9 @@ import pyodbc
 from typing import List
 from .ResultDto import ResultDto
 
-SELECT_QUERY = 'SELECT [id],[ht_time],[ht_odd],[ht_prematch_odd],[ht_prematch_goalline],[ft_time],[ft_odd],[ft_success],[ft_prematch_odd],[ft_prematch_goalline],[ht_rise],[ft_rise],[ht_success],[ht_last_min],[ft_last_min] FROM [HKJC_Odds].[dbo].[live_match] '
-UPDATE_QUERY = 'UPDATE [HKJC_Odds].[dbo].[live_match] set ht_time = ?, ht_odd = ?, ht_prematch_odd = ?, ht_prematch_goalline = ?, ht_rise = ?, ht_success = ?, ft_odd = ?, ft_prematch_odd = ?, ft_prematch_goalline = ?, ft_rise = ?, ft_success = ?, ft_time = ?, ht_last_min = ?, ft_last_min = ? where id = ?'
-INSERT_QUERY = 'INSERT INTO [HKJC_Odds].[dbo].[live_match] (ht_time, ht_odd, ht_prematch_odd, ht_prematch_goalline, ht_rise, ht_success, ft_odd, ft_prematch_odd, ft_prematch_goalline, ft_rise, ft_success, ft_time, ht_last_min, ft_last_min, id) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+SELECT_QUERY = 'SELECT [id],[ht_time],[ht_odd],[ht_prematch_odd],[ht_prematch_goalline],[ft_time],[ft_odd],[ft_success],[ft_prematch_odd],[ft_prematch_goalline],[ht_rise],[ft_rise],[ht_success],[ht_last_min],[ft_last_min],[date],[ht_probability],[ft_probability] FROM [HKJC_Odds].[dbo].[live_match] '
+UPDATE_QUERY = 'UPDATE [HKJC_Odds].[dbo].[live_match] set ht_time = ?, ht_odd = ?, ht_prematch_odd = ?, ht_prematch_goalline = ?, ht_rise = ?, ht_success = ?, ft_odd = ?, ft_prematch_odd = ?, ft_prematch_goalline = ?, ft_rise = ?, ft_success = ?, ft_time = ?, ht_last_min = ?, ft_last_min = ?, date = ?, ht_probability = ?, ft_probability = ? where id = ?'
+INSERT_QUERY = 'INSERT INTO [HKJC_Odds].[dbo].[live_match] (ht_time, ht_odd, ht_prematch_odd, ht_prematch_goalline, ht_rise, ht_success, ft_odd, ft_prematch_odd, ft_prematch_goalline, ft_rise, ft_success, ft_time, ht_last_min, ft_last_min, date, ht_probability, ft_probability, id) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
 
 class ResultRepository:
     __cursor :pyodbc.Cursor = None
@@ -30,6 +30,9 @@ class ResultRepository:
         dto.ft_time = result.ft_time
         dto.ht_last_min = result.ht_last_min
         dto.ft_last_min = result.ft_last_min
+        dto.match_date = result.date
+        dto.ht_prob = result.ht_probability
+        dto.ft_prob = result.ft_probability
         return dto
     
     def __MapFromDto(self, dto :ResultDto) -> tuple:
@@ -47,6 +50,9 @@ class ResultRepository:
                 dto.ft_time, 
                 dto.ht_last_min,
                 dto.ft_last_min,
+                dto.match_date,
+                dto.ht_prob,
+                dto.ft_prob,
                 dto.id)
     
        
