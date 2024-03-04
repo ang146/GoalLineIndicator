@@ -1,6 +1,7 @@
 results.csv
 __pycache__/*
 html_sample/*
+templates/*
 test.py
 *.pyc
 *.log
