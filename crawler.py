@@ -143,14 +143,110 @@ class SiteApi(Enum):
     G10OAL_Odd_Api = '/match/{0}/odds'
     HKJC = 'http://bet.hkjc.com'
     HKJC_Odd_Api = '/football/getJSON.aspx?jsontype=odds_allodds.aspx&matchid={0}'
-    HK33 = 'https://goal.hk33.com'
+    HKJC_Result_Api = '/football/getJSON.aspx?jsontype=results.aspx'
+
+from datetime import datetime
+
+class Temp_Match:
+    home_name = None
+    away_name = None
+    time_text = None
+    time_int = None
+    id = None
+    is_started = None
+    is_goaled = None
+    is_first_half = None
+    is_live_match = None
+    date = None
+    match_cache = {}
+        
+    def __init__(self, data, data_site:str):
+        if data_site == SiteApi.HKJC.name:
+            import dateutil.parser
+            self.date = dateutil.parser.parse(data['matchDate'])
+            self.is_live_match = True
+            self.is_started = True
+            self.home_name = data['homeTeam']['teamNameCH']
+            self.away_name = data['awayTeam']['teamNameCH']
+            self.id = data['matchID']
+            if data['matchState'] == 'FirstHalf':
+                self.is_first_half = True
+            else:
+                self.is_first_half = False
+
+            if data['matchState'] == 'FirstHalf' or data['matchState'] == 'FirstHalfCompleted':
+                if len(data['accumulatedscore']) == 0:
+                    self.is_goaled = False
+                elif data['accumulatedscore'][0]['home'] != '0' or data['accumulatedscore'][0]['away'] != '0':
+                    self.is_goaled = True
+            elif data['matchState'] == 'SecondHalf':
+                if len(data['accumulatedscore']) == 0:
+                    self.is_goaled = False
+                elif data['accumulatedscore'][1]['home'] != '0' or data['accumulatedscore'][1]['away'] != '0':
+                    self.is_goaled = True
+
+            if self.is_goaled:
+                return
+            
+            if data['matchState'] == 'FirstHalfCompleted' and self.id in self.match_cache:
+                self.match_cache.pop(self.id, None)
+                self.time_int = 46
+                self.time_text = "半場"
+            else:
+                if not self.id in self.match_cache:
+                    self.match_cache[self.id] = datetime.now()
+                if data['matchState'] == 'FirstHalf':
+                    self.time_int = int((datetime.now() - self.match_cache[self.id]).total_seconds() / 60)
+                elif data['matchState'] == 'SecondHalf':
+                    self.time_int = int((datetime.now() - self.match_cache[self.id]).total_seconds() / 60) + 46
+                self.time_text = f"{self.time_int}'"
+                    
+
+            
+
+        
+    def _convert_string_to_datetime(self, month_day_string):
+        # Get today's date
+        today = datetime.now()
+
+        # Parse the provided month and day string (assuming it's in MM-DD format)
+        month_day = datetime.strptime(month_day_string, "%m-%d")
+
+        # Check if the parsed month and day are after today's date
+        # If so, assume it's from the previous year
+        if datetime(today.year, month_day.month, month_day.day) > today:
+            year = today.year - 1
+        else:
+            year = today.year
+
+        # Combine the parsed month and day with the determined year
+        converted_date = datetime(year, month_day.month, month_day.day)
+        return converted_date
 
 if __name__ == "__main__":
-    #print(Crawler.GetMatchResults('50023119'))
-    #print(Crawler.GetMatchResults('50022355'))
-    #print(Crawler.GetPreMatchOdds('50022355', False))
-    #print(Crawler.GetPreMatchOdds('50023119', False))
-    #print(Crawler.GetPreMatchOdds('50015924', False))
-    #print(Crawler.GetPreMatchOdds('50015710', False))
-    #print(Crawler.GetLiveTimeOdds('50020760'))
-    print(type(SiteApi.HKJC.name))
+    from LoggerFactory import LoggerFactory
+    loggerFact = LoggerFactory()
+    crawler = Crawler(loggerFact)
+
+    result = crawler.GetWebsiteData(SiteApi.HKJC.value, SiteApi.HKJC_Result_Api.value).json()
+
+    if len(result) < 2:
+        print("Error")
+        pass
+
+
+    
+    for match in (result[1]['matches'] + result[0]['matches']):
+        available_state = ['FirstHalf', 'FirstHalfCompleted', 'SecondHalf']
+
+        if not match['matchState'] in available_state:
+            if match['awayTeam']['teamNameCH'] == '甘堡爾':
+                print(f"{match['homeTeam']['teamNameCH']}對{match['awayTeam']['teamNameCH']} - {match['matchState']}")
+            continue
+        matchData = Temp_Match(match, SiteApi.HKJC.name)
+        print(f'[{matchData.id}]{matchData.home_name}對{matchData.away_name}/上半場{matchData.is_first_half}/已入球{matchData.is_goaled}/有即場{matchData.is_live_match}/日期{matchData.date}/已開場{matchData.is_started}')
+        if not matchData.time_int is None:
+            print(f'比賽時間{matchData.time_int}')
+        print(matchData.match_cache)
+
+    

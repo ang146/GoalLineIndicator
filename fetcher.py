@@ -20,10 +20,48 @@ class Match:
     is_first_half = None
     is_live_match = None
     date = None
+    match_cache = {}
         
     def __init__(self, data :Tag, data_site:str):
-        if data_site == SiteApi.HK33.name:
-            pass
+        if data_site == SiteApi.HKJC.name:
+            import dateutil.parser
+            self.date = dateutil.parser.parse(data['matchDate'])
+            self.is_live_match = True
+            self.is_started = True
+            self.home_name = data['homeTeam']['teamNameCH']
+            self.away_name = data['awayTeam']['teamNameCH']
+            self.id = data['matchID']
+            if data['matchState'] == 'FirstHalf':
+                self.is_first_half = True
+            else:
+                self.is_first_half = False
+
+            if data['matchState'] == 'FirstHalf' or data['matchState'] == 'FirstHalfCompleted':
+                if len(data['accumulatedscore']) == 0:
+                    self.is_goaled = False
+                elif data['accumulatedscore'][0]['home'] != '0' or data['accumulatedscore'][0]['away'] != '0':
+                    self.is_goaled = True
+            elif data['matchState'] == 'SecondHalf':
+                if len(data['accumulatedscore']) == 0:
+                    self.is_goaled = False
+                elif data['accumulatedscore'][1]['home'] != '0' or data['accumulatedscore'][1]['away'] != '0':
+                    self.is_goaled = True
+
+            if self.is_goaled:
+                return
+            
+            if data['matchState'] == 'FirstHalfCompleted' and self.id in self.match_cache:
+                self.match_cache.pop(self.id, None)
+                self.time_int = 46
+                self.time_text = "半場"
+            else:
+                if not self.id in self.match_cache:
+                    self.match_cache[self.id] = datetime.now()
+                if data['matchState'] == 'FirstHalf':
+                    self.time_int = int((datetime.now() - self.match_cache[self.id]).total_seconds() / 60)
+                elif data['matchState'] == 'SecondHalf':
+                    self.time_int = int((datetime.now() - self.match_cache[self.id]).total_seconds() / 60) + 46
+                self.time_text = f"{self.time_int}'"
         else:
             center_text = data.select_one(".text-center")
             self.home_name = utils.trim_string(data.find("div", class_=lambda c: "text-right" in c).text)
@@ -130,34 +168,50 @@ class Fetcher:
         self.logger.debug(f"進行第{self.fetch_counter}次fetching")
         print(f"進行第{self.fetch_counter}次fetching")
         try:
-            result = self.crawler.GetWebsiteData(SiteApi.G10OAL.value, SiteApi.G10OAL_Live_Mathces.value).text
+            #result = self.crawler.GetWebsiteData(SiteApi.G10OAL.value, SiteApi.G10OAL_Live_Mathces.value).text
+            result = self.crawler.GetWebsiteData(SiteApi.HKJC.value, SiteApi.HKJC_Result_Api.value).json
         except Exception as ex:
             self.logger.debug(f"從網頁取得資料失敗, 類別: {type(ex)}, {ex}, {ex.args}")
             return []
-        soup = BeautifulSoup(result, "html.parser")
-        matches_text = soup.find_all(class_="card-body")
-        matches :List[Match] = []
-        today_date = datetime.now().date()
-        self.logger.debug(f'搵到一共{len(matches_text)}場賽事')
-        print(f'搵到一共{len(matches_text)}場賽事')
-        for match_text in matches_text:
-            m = Match(match_text)
-            self.logger.debug(f"{m.id}賽事日期為{str(m.date.date())}")
-            if (today_date - m.date.date() ).days <= 1:
-                matches.append(m)
+        
         toReturn = []
+        #soup = BeautifulSoup(result, "html.parser")
+        #matches_text = soup.select('div.div_tr.match')
+
+        ### Disable getting infos from G10oal as it is currently down
+        # matches_text = soup.find_all(class_="card-body")
+        # matches :List[Match] = []
+        # today_date = datetime.now().date()
+        # self.logger.debug(f'搵到一共{len(matches_text)}場賽事')
+        # print(f'搵到一共{len(matches_text)}場賽事')
+        # for match_text in matches_text:
+        #     m = Match(match_text)
+        #     self.logger.debug(f"{m.id}賽事日期為{str(m.date.date())}")
+        #     if (today_date - m.date.date() ).days <= 1:
+        #         matches.append(m)
         
-        if len(matches) == 0:
-            self._SleepThread("沒有任何賽事數據", 20)
+        # if len(matches) == 0:
+        #     self._SleepThread("沒有任何賽事數據", 20)
+        #     return toReturn
+        # else:
+        #     if not any(not x.is_started for x in matches) and (all(not x.is_live_match for x in matches) or all(x.is_goaled for x in matches) or all(not x.is_live_match or x.is_goaled for x in matches)):
+        #         self._SleepThread("所有賽事均無即場或已入球", 30)
+        #         return toReturn
+        #     elif all(not x.is_started for x in matches) or all(not x.is_live_match or x.is_goaled or not x.is_started for x in matches):
+        #         self._SleepThread("所有賽事均未開賽, 或已開賽但沒有即場或已入球", 1)
+        #         return toReturn
+
+        matches :List[Match] = []
+        if len(result) < 2:
+            print("收到奇怪的response")
             return toReturn
-        else:
-            if not any(not x.is_started for x in matches) and (all(not x.is_live_match for x in matches) or all(x.is_goaled for x in matches) or all(not x.is_live_match or x.is_goaled for x in matches)):
-                self._SleepThread("所有賽事均無即場或已入球", 30)
-                return toReturn
-            elif all(not x.is_started for x in matches) or all(not x.is_live_match or x.is_goaled or not x.is_started for x in matches):
-                self._SleepThread("所有賽事均未開賽, 或已開賽但沒有即場或已入球", 1)
-                return toReturn
         
+        for match in (result[1]['matches'] + result[0]['matches']):
+            available_state = ['FirstHalf', 'FirstHalfCompleted', 'SecondHalf']
+            if not match['matchState'] in available_state:
+                continue
+            matches.append(Match(match, SiteApi.HKJC.name))
+
         self.logger.debug(f'將檢查共{len(matches)}場賽事')
         print(f'將檢查共{len(matches)}場賽事')
         q = queue.Queue()

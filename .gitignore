@@ -1,6 +1,6 @@
-*.html
 results.csv
 __pycache__/*
+html_sample/*
 test.py
 *.pyc
 *.log
