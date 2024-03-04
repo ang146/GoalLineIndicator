@@ -44,14 +44,16 @@ class Match:
             elif data['matchState'] == 'SecondHalf':
                 if len(data['accumulatedscore']) == 0:
                     self.is_goaled = False
-                elif data['accumulatedscore'][1]['home'] != '0' or data['accumulatedscore'][1]['away'] != '0':
-                    self.is_goaled = True
-
-            if self.is_goaled:
-                return
+                else:
+                    if len(data['accumulatedscore']) <= 1:
+                        if data['accumulatedscore'][0]['home'] != '0' or data['accumulatedscore'][0]['away'] != '0':
+                            self.is_goaled = True
+                    elif data['accumulatedscore'][1]['home'] != '0' or data['accumulatedscore'][1]['away'] != '0':
+                        self.is_goaled = True
             
-            if data['matchState'] == 'FirstHalfCompleted' and self.id in self.match_cache:
-                self.match_cache.pop(self.id, None)
+            if data['matchState'] == 'FirstHalfCompleted': 
+                if self.id in self.match_cache:
+                    self.match_cache.pop(self.id, None)
                 self.time_int = 46
                 self.time_text = "半場"
             else:
@@ -59,8 +61,12 @@ class Match:
                     self.match_cache[self.id] = datetime.now()
                 if data['matchState'] == 'FirstHalf':
                     self.time_int = int((datetime.now() - self.match_cache[self.id]).total_seconds() / 60)
+                    if self.time_int >= 46:
+                        self.time_int = 45
                 elif data['matchState'] == 'SecondHalf':
                     self.time_int = int((datetime.now() - self.match_cache[self.id]).total_seconds() / 60) + 46
+                    if self.time_int >= 90:
+                        self.time_int = 90
                 self.time_text = f"{self.time_int}'"
         else:
             center_text = data.select_one(".text-center")
@@ -169,7 +175,7 @@ class Fetcher:
         print(f"進行第{self.fetch_counter}次fetching")
         try:
             #result = self.crawler.GetWebsiteData(SiteApi.G10OAL.value, SiteApi.G10OAL_Live_Mathces.value).text
-            result = self.crawler.GetWebsiteData(SiteApi.HKJC.value, SiteApi.HKJC_Result_Api.value).json
+            result = self.crawler.GetWebsiteData(SiteApi.HKJC.value, SiteApi.HKJC_Result_Api.value).json()
         except Exception as ex:
             self.logger.debug(f"從網頁取得資料失敗, 類別: {type(ex)}, {ex}, {ex.args}")
             return []
