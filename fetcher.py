@@ -7,7 +7,8 @@ from crawler import Crawler, SiteApi
 import utils
 import queue, threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
+import pytz
 
 class Match:
     home_name = None
@@ -173,6 +174,43 @@ class Fetcher:
     def FindMatch(self) -> List[List[str]]:
         self.logger.debug(f"進行第{self.fetch_counter}次fetching")
         print(f"進行第{self.fetch_counter}次fetching")
+        
+        try:
+            prefetches = self.crawler.GetWebsiteData(SiteApi.HKJC.value, SiteApi.HKJC_All_Odd_Api.value).json()
+            if not prefetches['matches'] is None and len(prefetches['matches']) > 0:
+                first_match = next((x for x in prefetches['matches'] if len(x['inplayPools']) > 0), None)
+                if first_match is None:
+                    self._SleepThread("未能搵到下場有即場的賽事, 休息8小時", 480)
+                    return []
+                import dateutil.parser
+                first_match_time = dateutil.parser.parse(first_match['matchDate'])
+                time_until = (first_match_time - datetime.now(tz=pytz.timezone('Asia/Hong_Kong'))).total_seconds()
+                if time_until > 28860:
+                    self._SleepThread("下場賽事超過8小時後", 480)
+                    return []
+                if time_until > 14460:
+                    self._SleepThread("下場賽事超過4小時後", 240)
+                    return []
+                if time_until > 7260:
+                    self._SleepThread("下場賽事超過2小時後", 120)
+                    return []
+                if time_until > 3660:
+                    self._SleepThread("下場賽事超過1小時後", 60)
+                    return []
+                if time_until > 1860:
+                    self._SleepThread("下場賽事超過半小時後", 30)
+                    return []
+                if time_until > 960:
+                    self._SleepThread("下場賽事超過15分鐘後", 15)
+                    return []
+                if time_until > 360:
+                    self._SleepThread("下場賽事大約5分鐘至15分鐘後", 5)
+                    return []
+            
+        except Exception as ex:
+            self.logger.debug(f"從網頁取得資料失敗, 類別: {type(ex)}, {ex}, {ex.args}")
+            return []
+            
         try:
             #result = self.crawler.GetWebsiteData(SiteApi.G10OAL.value, SiteApi.G10OAL_Live_Mathces.value).text
             result = self.crawler.GetWebsiteData(SiteApi.HKJC.value, SiteApi.HKJC_Result_Api.value).json()

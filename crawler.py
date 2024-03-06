@@ -143,6 +143,7 @@ class SiteApi(Enum):
     G10OAL_Odd_Api = '/match/{0}/odds'
     HKJC = 'http://bet.hkjc.com'
     HKJC_Odd_Api = '/football/getJSON.aspx?jsontype=odds_allodds.aspx&matchid={0}'
+    HKJC_All_Odd_Api = '/football/getJSON.aspx?jsontype=odds_allodds.aspx'
     HKJC_Result_Api = '/football/getJSON.aspx?jsontype=results.aspx'
 
 from datetime import datetime
