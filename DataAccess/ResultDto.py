@@ -19,6 +19,7 @@ class ResultDto:
     match_date :datetime = None
     ht_prob = None
     ft_prob = None
+    ht_pred = None
     
     def __init__(self, id, ht_time, ht_odd):
         self.id = id

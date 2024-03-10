@@ -69,7 +69,7 @@ class Match:
                     if self.time_int >= 90:
                         self.time_int = 90
                 self.time_text = f"{self.time_int}'"
-        else:
+        elif data_site == SiteApi.G10OAL.name:
             center_text = data.select_one(".text-center")
             self.home_name = utils.trim_string(data.find("div", class_=lambda c: "text-right" in c).text)
             self.away_name = utils.trim_string(data.find("div", class_=lambda c: "text-left" in c).text)
@@ -117,7 +117,7 @@ class Match:
         # Combine the parsed month and day with the determined year
         converted_date = datetime(year, month_day.month, month_day.day)
         return converted_date
-        
+            
     def __str__(self):
         max_length = 32
         home = utils.half_to_full_width(self.home_name) + " " * (max_length-len(self.home_name)*2)
@@ -288,7 +288,7 @@ class Fetcher:
     
     def __getSuccessRateMessage_20240122(self, match :Match, ht_line, ht_odd:float, ft_line, ft_odd:float) -> str:
         previous_records = self.repository.GetResults(True)
-        win_rate = "\n"
+        win_rate = "\n\n===過往紀錄分析===\n"
         match_goalline_records = [x for x in previous_records if x.ht_prematch_goalline == ht_line and x.ft_prematch_goalline == ft_line]
         
         success = 0
@@ -334,8 +334,7 @@ class Fetcher:
         
         success_rate = (success/total) * 100
         two_ball_success_rate = (two_ball_success/total) * 100
-        win_rate += f"賽前{'半' if match.is_first_half else '全'}場中位數: {ht_line if match.is_first_half else ft_line}\n"
-        win_rate += f"通知發放時間於{match.time_text}"
+        win_rate += f"{'全' if match.is_first_half else '半'}場{ft_line if match.is_first_half else ht_line}大波"
         win_rate += f"\n半場大波賠率{ht_odd}±{ht_odd_increment}"
         win_rate += f"\n全場大波賠率{ft_odd}±{ft_odd_increment}"
         win_rate += f"\n相類似{total}場賽事有1球機會: {success_rate:.2f}%"
@@ -343,11 +342,12 @@ class Fetcher:
         
         dto = self.repository.GetResultById(match.id)
         if dto is not None:
-            if match.is_first_half:
+            if match.is_first_half and dto.ht_prob is None:
                 dto.ht_prob = success_rate
-            else:
+                self.repository.Upsert(dto)
+            elif dto.ft_prob is None:
                 dto.ft_prob = success_rate
-            self.repository.Upsert(dto)
+                self.repository.Upsert(dto)
             
         recent_days = 3
         self.logger.debug(f"檢查最近{recent_days}日已紀錄場次可靠程度")
@@ -356,12 +356,12 @@ class Fetcher:
         reliable = 0
         reliable_total = 0
         for recent_match in recent_matches:
-            if recent_match.ht_prob is not None:
+            if not recent_match.ht_prob is None and not recent_match.ht_success is None:
                 if (recent_match.ht_prob > 50 and recent_match.ht_success) or (recent_match.ht_prob < 50 and not recent_match.ht_success):
                     reliable += 1
                 if recent_match.ht_prob != 50:
                     reliable_total += 1
-            if recent_match.ft_prob is not None:
+            if not recent_match.ft_prob is None and not recent_match.ft_success is None:
                 if (recent_match.ft_prob > 50 and recent_match.ft_success) or (recent_match.ft_prob < 50 and not recent_match.ft_success):
                     reliable += 1
                 if recent_match.ft_prob != 50:
@@ -373,10 +373,106 @@ class Fetcher:
             return win_rate
                 
         reliable_rate = (reliable / reliable_total) * 100
-        self.logger.debug(f"近{recent_days}日牙bot預測可靠程度:{reliable_rate}%")
-        win_rate += f"\n近{recent_days}日牙bot預測可靠程度:{reliable_rate}%"
+        self.logger.debug(f"近{recent_days}日數據庫可靠程度:{reliable_rate:.2f}%")
+        win_rate += f"\n近{recent_days}日數據庫命中:{reliable_rate:.2f}%"
             
         return win_rate
+    
+    def _GetPredictionFromModel(self, ht_time,ht_odd,ht_prematch_odd,ft_prematch_odd,ht_rise,ft_rise,ht_prematch_goalline,ft_prematch_goalline, match :Match) -> str:
+        import joblib
+        def ConvertFlowToDigit(flow) -> int:
+            if flow is None:
+                return 2
+            if flow:
+                return 1
+            return 0
+        
+        def ConvertGoalLineToDigit(goalLine) -> int:
+            if goalLine == '0.5/1.0':
+                return 0
+            if goalLine == '1.0/1.5':
+                return 1
+            if goalLine == '1.5':
+                return 2
+            if goalLine == '1.5/2.0':
+                return 3
+            if goalLine == '2.0/2.5':
+                return 4
+            if goalLine == '2.5':
+                return 5
+            if goalLine == '2.5/3.0':
+                return 6
+            if goalLine == '3.0/3.5':
+                return 7
+            if goalLine == '3.5':
+                return 8
+            if goalLine == '3.5/4.0':
+                return 9
+            if goalLine == '4.0/4.5':
+                return 10
+            if goalLine == '4.5':
+                return 11
+            if goalLine == '4.5/5.0':
+                return 12
+            if goalLine == '5.0/5.5':
+                return 13
+            if goalLine == '5.5':
+                return 14
+            return 15
+            
+        ht_goalline = ConvertGoalLineToDigit(ht_prematch_goalline)
+        ft_goalline = ConvertGoalLineToDigit(ft_prematch_goalline)
+        ht_flow = ConvertFlowToDigit(ht_rise)
+        ft_flow = ConvertFlowToDigit(ft_rise)
+        
+        model = joblib.load('model_lib2.joblib')
+        predictions = model.predict([[
+            ht_time,
+            ht_odd,
+            ht_prematch_odd,
+            ft_prematch_odd,
+            ht_flow,
+            ft_flow,
+            ht_goalline,
+            ft_goalline]])
+        
+        bot_predict = predictions[0] == 1
+        dto = self.repository.GetResultById(match.id)
+        if not dto is None and dto.ht_pred is None:
+            dto.ht_pred = 1 if bot_predict else 0
+            self.repository.Upsert(dto)
+        
+        previous_records :List[ResultDto] = self.repository.GetResults(False)
+        recent_days = 3
+        self.logger.debug(f"檢查最近{recent_days}日預測可靠程度")
+        recent_matches = [x for x in previous_records if x.match_date is not None and (match.date.date() - x.match_date.date()).days <= recent_days]
+        
+        reliable = 0
+        reliable_total = 0
+        for recent_match in recent_matches:
+            if recent_match.ht_pred is None:
+                continue
+            if recent_match.ht_success is None:
+                continue
+            
+            if not recent_match.ht_pred and not recent_match.ht_success:
+                reliable += 1
+            elif recent_match.ht_pred and recent_match.ht_success >= 1:
+                reliable += 1 
+            
+            reliable_total += 1
+                
+        self.logger.debug(f"共有{reliable_total}場有效場次, 可靠場次有{reliable}場")
+        
+        predict_msg = "\n\n====ML大細預測====\n"
+        predict_msg += f"牙bot預測 {'有' if bot_predict else '無'} 入球"
+        if reliable_total < 4:
+            return predict_msg
+        
+        reliable_rate = (reliable / reliable_total) * 100
+        self.logger.debug(f"近{recent_days}日預測可靠程度:{reliable_rate:.2f}%")
+        predict_msg += f"\n近{recent_days}日命中:{reliable_rate:.2f}%"
+        return predict_msg
     
     def __findmatch(self, queue: queue.Queue, toReturn:list):
         try:
@@ -386,17 +482,14 @@ class Fetcher:
                     print(f'{str(m)}未開場')
                     queue.task_done()
                     continue
-                
                 if m.is_goaled:
                     print(f'{str(m)}已入波')
                     queue.task_done()
                     continue
-                    
                 if not m.is_live_match:
                     print(f'{str(m)}無即場')
                     queue.task_done()
                     continue
-                
                 if m.time_int >= 41 and m.is_first_half and m.id not in self.ht_last_min:
                     header = f'{m.home_name} 對 {m.away_name} 半場最後4分鐘'
                     body = f'目前球賽時間 {m.time_text}'
@@ -408,7 +501,6 @@ class Fetcher:
                     self.ht_last_min.append(m.id)
                     if len(self.ht_last_min) > 5:
                         _ = self.ht_last_min.pop(0)
-                        
                 if m.time_int >= 86 and not m.is_first_half and m.id not in self.ft_last_min:
                     header = f'{m.home_name} 對 {m.away_name} 全場最後4分鐘'
                     body = f'目前球賽時間 {m.time_text}'
@@ -420,7 +512,6 @@ class Fetcher:
                     self.ft_last_min.append(m.id)
                     if len(self.ft_last_min) > 5:
                         _ = self.ft_last_min.pop(0)
-                
                 if m.is_first_half and m.id in self.half_time_fetch_cache:
                     print(f'{str(m)}上半場已通知')
                     queue.task_done()
@@ -437,13 +528,11 @@ class Fetcher:
                     print(f'{str(m)}搵唔到賠率')
                     queue.task_done()
                     continue
-                
                 if odd < 2:
                     self.logger.debug(f"{m.id}賽事0.75大賠率未達2倍")
                     print(f'{str(m)}目前賠率{odd}, 未達2水')
                     queue.task_done()
                     continue
-                
                 if odd > 2.15:
                     self.logger.debug(f"{m.id}賽事0.75大賠率超過2.15, 不宜紀錄")
                     print(f'{str(m)}目前賠率超過2.15, 不會紀錄及通知')
@@ -492,9 +581,11 @@ class Fetcher:
                             
                 header = f'{m.home_name} 對 {m.away_name} 即場0.75大有水'
                 body = f'目前球賽時間 {m.time_text}\n'
-                body += f'目前賠率: 0.5/1.0大 - {odd}\n'
-                body += f'賽前賠率: {ht_prematch_goal_line if m.is_first_half else ft_prematch_goal_line}大 - {ht_prematch_high_odd if m.is_first_half else ft_prematch_high_odd}, {flow}\n'
+                #body += f'目前賠率: 0.5/1.0大 - {odd}\n'
+                body += f'賽前賠率: {ht_prematch_goal_line if m.is_first_half else ft_prematch_goal_line}大 - {ht_prematch_high_odd if m.is_first_half else ft_prematch_high_odd}, {flow}'
                 body += f'{self.__getSuccessRateMessage_20240122(m, ht_prematch_goal_line, ht_prematch_high_odd, ft_prematch_goal_line, ft_prematch_high_odd)}'
+                if m.is_first_half:
+                    body += f'{self._GetPredictionFromModel(m.time_int, odd, ht_prematch_high_odd, ft_prematch_high_odd, ht_prematch_odd_flow, ft_prematch_odd_flow, ht_prematch_goal_line, ft_prematch_goal_line, m)}'
                 self.logger.debug(f"{m.id}賽事將發出通知")
                 print(f'{str(m)}將發出通知')
                 toReturn.append([header, body])
