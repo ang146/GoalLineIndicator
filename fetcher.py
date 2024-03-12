@@ -455,12 +455,16 @@ class Fetcher:
             if recent_match.ht_success is None:
                 continue
             
-            if not recent_match.ht_pred and not recent_match.ht_success:
-                reliable += 1
-            elif recent_match.ht_pred and recent_match.ht_success >= 1:
-                reliable += 1 
-            
-            reliable_total += 1
+            if bot_predict:
+                if recent_match.ht_pred:
+                    if recent_match.ht_success >= 1:
+                        reliable += 1
+                reliable_total += 1
+            else:
+                if not recent_match.ht_pred:
+                    if not recent_match.ht_success:
+                        reliable += 1
+                reliable_total += 1
                 
         self.logger.debug(f"共有{reliable_total}場有效場次, 可靠場次有{reliable}場")
         
