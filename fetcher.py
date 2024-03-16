@@ -1,10 +1,9 @@
-from bs4 import BeautifulSoup, Tag
-from config import *
+from Config import *
 from typing import List
 from DataAccess.ResultRepository import ResultRepository
 from DataAccess.ResultDto import ResultDto
-from crawler import Crawler, SiteApi
-import utils
+from Crawler import Crawler, SiteApi
+import Utils
 import queue, threading
 import time
 from datetime import datetime
@@ -23,7 +22,7 @@ class Match:
     date = None
     match_cache = {}
         
-    def __init__(self, data :Tag, data_site:str):
+    def __init__(self, data, data_site:str):
         if data_site == SiteApi.HKJC.name:
             import dateutil.parser
             self.date = dateutil.parser.parse(data['matchDate'])
@@ -70,11 +69,13 @@ class Match:
                         self.time_int = 90
                 self.time_text = f"{self.time_int}'"
         elif data_site == SiteApi.G10OAL.name:
+            from bs4 import Tag
+            data :Tag = data
             center_text = data.select_one(".text-center")
-            self.home_name = utils.trim_string(data.find("div", class_=lambda c: "text-right" in c).text)
-            self.away_name = utils.trim_string(data.find("div", class_=lambda c: "text-left" in c).text)
+            self.home_name = Utils.TrimString(data.find("div", class_=lambda c: "text-right" in c).text)
+            self.away_name = Utils.TrimString(data.find("div", class_=lambda c: "text-left" in c).text)
             self.id = data.find("a", href=True)['href'][7:-8]
-            self.date = self._convert_string_to_datetime(data.find("h6", class_=lambda c: "text-muted" in c).find('small').text[:-6])
+            self.date = self._ConvertStringToDateTime(data.find("h6", class_=lambda c: "text-muted" in c).find('small').text[:-6])
             if "未開賽" in center_text.text:
                 self.is_started = False
                 return
@@ -100,7 +101,7 @@ class Match:
                 self.time_int = 46
             self.is_first_half = self.time_int <= 45
         
-    def _convert_string_to_datetime(self, month_day_string):
+    def _ConvertStringToDateTime(self, month_day_string):
         # Get today's date
         today = datetime.now()
 
@@ -120,8 +121,8 @@ class Match:
             
     def __str__(self):
         max_length = 32
-        home = utils.half_to_full_width(self.home_name) + " " * (max_length-len(self.home_name)*2)
-        away = utils.half_to_full_width(self.away_name) + " " * (max_length-len(self.away_name)*2)
+        home = Utils.FormatStringWidth(self.home_name) + " " * (max_length-len(self.home_name)*2)
+        away = Utils.FormatStringWidth(self.away_name) + " " * (max_length-len(self.away_name)*2)
         return f'[{self.id}]{home} 對 {away} '
 
 class Fetcher:    
@@ -263,7 +264,7 @@ class Fetcher:
             q.put((match,))
             
         for i in range(16):
-            thread = threading.Thread(target=self.__findmatch, args=(q, toReturn) )
+            thread = threading.Thread(target=self._ProcessMatch, args=(q, toReturn) )
             thread.daemon = True
             thread.start()
         
@@ -272,7 +273,7 @@ class Fetcher:
         self.fetch_counter += 1
         return toReturn
     
-    def __getOddIncrement(self, odd:float):
+    def _GetOddIncrement(self, odd:float):
         if odd < 1.5:
             return 0.03
         if odd >= 1.5 and odd < 1.65:
@@ -286,7 +287,7 @@ class Fetcher:
         if odd >= 2.4:
             return 0.2
     
-    def __getSuccessRateMessage_20240122(self, match :Match, ht_line, ht_odd:float, ft_line, ft_odd:float) -> str:
+    def _GetSuccessRateMessage_20240122(self, match :Match, ht_line, ht_odd:float, ft_line, ft_odd:float) -> str:
         previous_records = self.repository.GetResults(True)
         win_rate = "\n\n===過往紀錄分析===\n"
         match_goalline_records = [x for x in previous_records if x.ht_prematch_goalline == ht_line and x.ft_prematch_goalline == ft_line]
@@ -296,8 +297,8 @@ class Fetcher:
         total = 0
         self.logger.debug(f"[{match.id}]將檢查全場半場賠率, 時間值:{match.time_int}, 半場{ht_line}賠率值:{ht_odd}, 全場{ft_line}賠率值:{ft_odd}")
         
-        ht_odd_increment = self.__getOddIncrement(ht_odd)
-        ft_odd_increment = self.__getOddIncrement(ft_odd)
+        ht_odd_increment = self._GetOddIncrement(ht_odd)
+        ft_odd_increment = self._GetOddIncrement(ft_odd)
         self.logger.debug(f"[{match.id}]半場誤差值{ht_odd_increment}, 全場誤差值{ft_odd_increment}")
         
         if match.is_first_half:
@@ -349,9 +350,8 @@ class Fetcher:
                 dto.ft_prob = success_rate
                 self.repository.Upsert(dto)
             
-        recent_days = 3
-        self.logger.debug(f"檢查最近{recent_days}日已紀錄場次可靠程度")
-        recent_matches = [x for x in previous_records if x.match_date is not None and (match.date.date() - x.match_date.date()).days <= recent_days]
+        self.logger.debug(f"檢查最近{RELIABLE_DAYS}日已紀錄場次可靠程度")
+        recent_matches = [x for x in previous_records if x.match_date is not None and (match.date.date() - x.match_date.date()).days <= RELIABLE_DAYS]
         
         reliable = 0
         reliable_total = 0
@@ -373,8 +373,8 @@ class Fetcher:
             return win_rate
                 
         reliable_rate = (reliable / reliable_total) * 100
-        self.logger.debug(f"近{recent_days}日數據庫可靠程度:{reliable_rate:.2f}%")
-        win_rate += f"\n近{recent_days}日數據庫命中:{reliable_rate:.2f}%"
+        self.logger.debug(f"近{RELIABLE_DAYS}日數據庫可靠程度:{reliable_rate:.2f}%")
+        win_rate += f"\n近{RELIABLE_DAYS}日數據庫命中:{reliable_rate:.2f}%"
             
         return win_rate
     
@@ -443,9 +443,9 @@ class Fetcher:
             self.repository.Upsert(dto)
         
         previous_records :List[ResultDto] = self.repository.GetResults(False)
-        recent_days = 3
-        self.logger.debug(f"檢查最近{recent_days}日預測可靠程度")
-        recent_matches = [x for x in previous_records if x.match_date is not None and (match.date.date() - x.match_date.date()).days <= recent_days]
+        
+        self.logger.debug(f"檢查最近{RELIABLE_DAYS}日預測可靠程度")
+        recent_matches = [x for x in previous_records if x.match_date is not None and (match.date.date() - x.match_date.date()).days <= RELIABLE_DAYS]
         
         reliable = 0
         reliable_total = 0
@@ -459,12 +459,12 @@ class Fetcher:
                 if recent_match.ht_pred:
                     if recent_match.ht_success >= 1:
                         reliable += 1
-                reliable_total += 1
+                    reliable_total += 1
             else:
                 if not recent_match.ht_pred:
                     if not recent_match.ht_success:
                         reliable += 1
-                reliable_total += 1
+                    reliable_total += 1
                 
         self.logger.debug(f"共有{reliable_total}場有效場次, 可靠場次有{reliable}場")
         
@@ -474,11 +474,11 @@ class Fetcher:
             return predict_msg
         
         reliable_rate = (reliable / reliable_total) * 100
-        self.logger.debug(f"近{recent_days}日預測可靠程度:{reliable_rate:.2f}%")
-        predict_msg += f"\n近{recent_days}日命中:{reliable_rate:.2f}%"
+        self.logger.debug(f"近{RELIABLE_DAYS}日預測可靠程度:{reliable_rate:.2f}%")
+        predict_msg += f"\n近{RELIABLE_DAYS}日命中:{reliable_rate:.2f}%"
         return predict_msg
     
-    def __findmatch(self, queue: queue.Queue, toReturn:list):
+    def _ProcessMatch(self, queue: queue.Queue, toReturn:list):
         try:
             while not queue.empty():
                 m :Match = queue.get()[0]
@@ -587,7 +587,7 @@ class Fetcher:
                 body = f'目前球賽時間 {m.time_text}\n'
                 #body += f'目前賠率: 0.5/1.0大 - {odd}\n'
                 body += f'賽前賠率: {ht_prematch_goal_line if m.is_first_half else ft_prematch_goal_line}大 - {ht_prematch_high_odd if m.is_first_half else ft_prematch_high_odd}, {flow}'
-                body += f'{self.__getSuccessRateMessage_20240122(m, ht_prematch_goal_line, ht_prematch_high_odd, ft_prematch_goal_line, ft_prematch_high_odd)}'
+                body += f'{self._GetSuccessRateMessage_20240122(m, ht_prematch_goal_line, ht_prematch_high_odd, ft_prematch_goal_line, ft_prematch_high_odd)}'
                 if m.is_first_half:
                     body += f'{self._GetPredictionFromModel(m.time_int, odd, ht_prematch_high_odd, ft_prematch_high_odd, ht_prematch_odd_flow, ft_prematch_odd_flow, ht_prematch_goal_line, ft_prematch_goal_line, m)}'
                 self.logger.debug(f"{m.id}賽事將發出通知")
@@ -612,7 +612,7 @@ class Fetcher:
             queue.task_done()
     
 if __name__ == "__main__":
-    from crawler import Crawler
+    from Crawler import Crawler
     from LoggerFactory import LoggerFactory
     loggerFact = LoggerFactory()
     crawler = Crawler(loggerFact)

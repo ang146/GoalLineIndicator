@@ -3,8 +3,8 @@ from logging.handlers import RotatingFileHandler
 import os
 
 class LoggerFactory:
-    def __init__(self):
-        self.base_filename = 'logs.log'
+    def __init__(self, logFileName :str):
+        self.base_filename = f'{logFileName}.log'
         log_folder = os.path.join(os.path.dirname(__file__), 'Logs')  # Folder named 'logs' next to the script
         os.makedirs(log_folder, exist_ok=True)  # Create the 'logs' folder if it doesn't exist
         log_file_path = os.path.join(log_folder, self.base_filename)

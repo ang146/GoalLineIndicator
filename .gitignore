@@ -5,3 +5,4 @@ templates/*
 test.py
 *.pyc
 *.log
+Config.py
