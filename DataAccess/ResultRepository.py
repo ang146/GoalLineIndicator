@@ -95,20 +95,10 @@ class ResultRepository:
             self.__cursor.commit()
                 
 if __name__ == "__main__":
-    from config import *
+    from Config import *
     from bs4 import BeautifulSoup
     import requests
-    driver = 'SQL SERVER'
-    connection_string = f"""
-        DRIVER={{{driver}}};
-        SERVER={SERVER_NAME};
-        DATABASE={DATABASE_NAME};
-        PORT=49172;
-        Trust_Connection=yes;
-        uid={USER_NAME};
-        pwd={PASSWORD};
-    """
-    recorder = ResultRepository(connection_string)
+    recorder = ResultRepository(CONNECTION_STRING)
     #ids = recorder.GetUnfinishedMatchIds()
     #print(ids)
     
