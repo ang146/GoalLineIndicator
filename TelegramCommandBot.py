@@ -17,9 +17,9 @@ SECONDS_IN_DAY = 86400
 loggerFact = LoggerFactory("CommandBot_Logs")
 repo = ResultRepository(CONNECTION_STRING, loggerFact)
     
-async def data_command(update : Update, context :ContextTypes.DEFAULT_TYPE):
+async def DataByDayCommand(update : Update, context :ContextTypes.DEFAULT_TYPE):
     currentTime = datetime.now(tz=pytz.timezone('Asia/Hong_Kong'))
-    requestDays, recentMatches, *_ = await get_matches_within_dates(update, context, currentTime)
+    requestDays, recentMatches, *_ = await GetMatchesWithinDate(update, context, currentTime)
     
     accurracyDict = {}
     for day in range(requestDays):
@@ -52,15 +52,15 @@ async def data_command(update : Update, context :ContextTypes.DEFAULT_TYPE):
     rates = [value[0] for value in accurracyDict.values()]
     
     returnMessage = f"近{7 if requestDays >= 7 else requestDays}日數據庫分析趨勢\n" + "\n".join(f'{f"{day}日前" if day > 0 else "今日"}: {value[0]:.2f}% (共{value[1]}場次)' for day, value in reversed(accurracyDict.items()) if day <= 6)
-    temp_filename = generate_trend_graph(days, rates)
+    temp_filename = GenerateTrendGraph(days, rates, '日數(左為最近)')
     
     await update.message.reply_photo(open(temp_filename, 'rb'), caption=returnMessage)
     import os
     os.unlink(temp_filename)
     
-async def predict_command(update : Update, context :ContextTypes.DEFAULT_TYPE, predict :bool):
+async def PredictionByDays(update : Update, context :ContextTypes.DEFAULT_TYPE, predict :bool):
     currentTime = datetime.now(tz=pytz.timezone('Asia/Hong_Kong'))
-    requestDays, matches, *_ = await get_matches_within_dates(update, context, currentTime)
+    requestDays, matches, *_ = await GetMatchesWithinDate(update, context, currentTime)
     
     accurracyDict = {}
     
@@ -89,6 +89,7 @@ async def predict_command(update : Update, context :ContextTypes.DEFAULT_TYPE, p
                     if not match.ht_success:
                         correct += 1
                     total += 1
+            matches.remove(match)
                 
         rate = 0
         if total != 0:
@@ -100,19 +101,46 @@ async def predict_command(update : Update, context :ContextTypes.DEFAULT_TYPE, p
     rates = [value[0] for value in accurracyDict.values()]
     
     returnMessage = f"近{7 if requestDays >= 7 else requestDays}預測日趨勢\n" + "\n".join(f'{f"{day}日前" if day > 0 else "今日"}: {value[0]:.2f}% (共{value[1]}場次)' for day, value in reversed(accurracyDict.items()) if day <= 6)
-    temp_filename = generate_trend_graph(days, rates)
+    temp_filename = GenerateTrendGraph(days, rates, '日數(左為最近)')
     
     await update.message.reply_photo(open(temp_filename, 'rb'), caption=returnMessage)
     import os
     os.unlink(temp_filename)
-
-async def predict_true_command(update, context):
-    await predict_command(update, context, True)
-
-async def predict_false_command(update, context):
-    await predict_command(update, context, False)
     
-async def get_matches_within_dates(update : Update, context :ContextTypes.DEFAULT_TYPE, currentTime :datetime) -> tuple[int, List[ResultDto]]:
+async def PredictionRecent(update :Update, context :ContextTypes.DEFAULT_TYPE, predict :bool):
+    matches :List[ResultDto] = sorted(repo.GetResults(False), key=lambda x: x.id)
+    matches = [x for x in matches if x.id > 1060 and not x.ht_success is None and not x.ht_pred is None and x.ht_pred == predict]
+    matches = matches[:10]
+    reply_msg = f"牙bot預測近10場{'有' if predict else '無'}為:\n(最近)"
+    for match in matches:
+        if match.ht_success >= 1:
+            if predict:
+                reply_msg += '✅'
+            else:
+                reply_msg += '❌'
+        else:
+            if predict:
+                reply_msg += '❌'
+            else:
+                reply_msg += '✅'
+    reply_msg += '(第10場)'
+    
+    await update.message.reply_text(reply_msg)
+    
+
+async def PredictTrueByDaysCommand(update, context):
+    await PredictionByDays(update, context, True)
+
+async def PredictFalseByDaysCommand(update, context):
+    await PredictionByDays(update, context, False)
+    
+async def PredictTrueRecentCommand(update, context):
+    await PredictionRecent(update, context, True)
+    
+async def PredictFalseRecentCommand(update, context):
+    await PredictionRecent(update, context, False)
+    
+async def GetMatchesWithinDate(update : Update, context :ContextTypes.DEFAULT_TYPE, currentTime :datetime) -> tuple[int, List[ResultDto]]:
     results = repo.GetResults(True)
     requestDays = 10
     if context.args:
@@ -131,7 +159,7 @@ async def get_matches_within_dates(update : Update, context :ContextTypes.DEFAUL
     
     return (requestDays, [x for x in results if x.match_date is not None and (currentTime - pytz.timezone('Asia/Hong_Kong').localize(x.match_date)).total_seconds() <= (SECONDS_IN_DAY * requestDays)])
 
-def generate_trend_graph(days :List[int], rates :List[float]) -> str:
+def GenerateTrendGraph(days :List[int], rates :List[float], x_lbl :str) -> str:
     x = np.linspace(0, len(days) - 1, 100)
     
     from scipy.interpolate import CubicSpline
@@ -139,11 +167,11 @@ def generate_trend_graph(days :List[int], rates :List[float]) -> str:
     
     plt.rcParams['font.family'] = ['MingLiU', 'Arial', 'sans-serif']
     
-    plt.plot(range(len(days)), rates, 'o', label='Original data')
-    plt.plot(x, cs(x), label='Smooth line')
+    plt.plot(range(len(days)), rates, 'o', label="實數")
+    plt.plot(x, cs(x), label="曲線圖")
 
     plt.ylim(0, 100)
-    plt.xlabel('日數(左為最近)')
+    plt.xlabel(x_lbl)
     plt.ylabel('命中 (%)')
     plt.title('命中趨勢')
     plt.grid(True)
@@ -158,29 +186,21 @@ def generate_trend_graph(days :List[int], rates :List[float]) -> str:
         temp_filename = temp_file.name    
     
     return temp_filename
-
-async def message_handler(update : Update, context :ContextTypes.DEFAULT_TYPE):
-    message_text = update.message.text
-    bot_username = context.bot.username
-
-    if bot_username in message_text:
-        user_text = message_text.replace(bot_username, '').strip()
-
-        if user_text:
-            await update.message.reply_text(f"{user_text[0]}你老母")
-        else:
-            await update.message.reply_text("咩")
+            
+async def errors(update : Update, context :ContextTypes.DEFAULT_TYPE):
+    print(f"Update {update} caused the error {context.error}")
         
 
 if __name__ == "__main__":
     app = Application.builder().token(TOKEN).build()
     print("starting bot...")
     
-    app.add_handler(CommandHandler('data', data_command))
-    app.add_handler(CommandHandler('preyes', predict_true_command))
-    app.add_handler(CommandHandler('preno', predict_false_command))
-    app.add_handler(MessageHandler(filters.TEXT, message_handler))
-
+    app.add_handler(CommandHandler('data_day', DataByDayCommand))
+    app.add_handler(CommandHandler('yes_day', PredictTrueByDaysCommand))
+    app.add_handler(CommandHandler('no_day', PredictFalseByDaysCommand))
+    app.add_handler(CommandHandler('yes_recent', PredictTrueRecentCommand))
+    app.add_handler(CommandHandler('no_recent', PredictFalseRecentCommand))
+    app.add_error_handler(errors)
     
     print("polling...")
     app.run_polling(poll_interval=5)
