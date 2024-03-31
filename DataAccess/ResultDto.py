@@ -1,7 +1,7 @@
 from datetime import datetime
 
 class ResultDto:
-    id = None
+    hkjc_id = None
     ht_time = None
     ht_odd = None
     ht_prematch_odd = None
@@ -20,8 +20,9 @@ class ResultDto:
     ht_prob = None
     ft_prob = None
     ht_pred = None
+    id = None
     
-    def __init__(self, id, ht_time, ht_odd):
-        self.id = id
+    def __init__(self, hkjc_id, ht_time, ht_odd):
+        self.hkjc_id = hkjc_id
         self.ht_time = ht_time
         self.ht_odd = ht_odd

@@ -2,9 +2,9 @@ import pyodbc
 from typing import List
 from .ResultDto import ResultDto
 
-SELECT_QUERY = 'SELECT [id],[ht_time],[ht_odd],[ht_prematch_odd],[ht_prematch_goalline],[ft_time],[ft_odd],[ft_success],[ft_prematch_odd],[ft_prematch_goalline],[ht_rise],[ft_rise],[ht_success],[ht_last_min],[ft_last_min],[date],[ht_probability],[ft_probability],[ht_prediction] FROM [HKJC_Odds].[dbo].[live_match] '
-UPDATE_QUERY = 'UPDATE [HKJC_Odds].[dbo].[live_match] set ht_time = ?, ht_odd = ?, ht_prematch_odd = ?, ht_prematch_goalline = ?, ht_rise = ?, ht_success = ?, ft_odd = ?, ft_prematch_odd = ?, ft_prematch_goalline = ?, ft_rise = ?, ft_success = ?, ft_time = ?, ht_last_min = ?, ft_last_min = ?, date = ?, ht_probability = ?, ft_probability = ?, ht_prediction = ? where id = ?'
-INSERT_QUERY = 'INSERT INTO [HKJC_Odds].[dbo].[live_match] (ht_time, ht_odd, ht_prematch_odd, ht_prematch_goalline, ht_rise, ht_success, ft_odd, ft_prematch_odd, ft_prematch_goalline, ft_rise, ft_success, ft_time, ht_last_min, ft_last_min, date, ht_probability, ft_probability, ht_prediction, id) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+SELECT_QUERY = 'SELECT [hkjc_id],[ht_time],[ht_odd],[ht_prematch_odd],[ht_prematch_goalline],[ft_time],[ft_odd],[ft_success],[ft_prematch_odd],[ft_prematch_goalline],[ht_rise],[ft_rise],[ht_success],[ht_last_min],[ft_last_min],[date],[ht_probability],[ft_probability],[ht_prediction],[id] FROM [HKJC_Odds].[dbo].[live_match] '
+UPDATE_QUERY = 'UPDATE [HKJC_Odds].[dbo].[live_match] set ht_time = ?, ht_odd = ?, ht_prematch_odd = ?, ht_prematch_goalline = ?, ht_rise = ?, ht_success = ?, ft_odd = ?, ft_prematch_odd = ?, ft_prematch_goalline = ?, ft_rise = ?, ft_success = ?, ft_time = ?, ht_last_min = ?, ft_last_min = ?, date = ?, ht_probability = ?, ft_probability = ?, ht_prediction = ? where hkjc_id = ?'
+INSERT_QUERY = 'INSERT INTO [HKJC_Odds].[dbo].[live_match] (ht_time, ht_odd, ht_prematch_odd, ht_prematch_goalline, ht_rise, ht_success, ft_odd, ft_prematch_odd, ft_prematch_goalline, ft_rise, ft_success, ft_time, ht_last_min, ft_last_min, date, ht_probability, ft_probability, ht_prediction, hkjc_id) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
 
 class ResultRepository:
     __cursor :pyodbc.Cursor = None
@@ -17,7 +17,7 @@ class ResultRepository:
         self.__logger = loggerFactory.getLogger("Repository")
     
     def __MapToDto(self, result) -> ResultDto:
-        dto = ResultDto(result.id, result.ht_time, result.ht_odd)
+        dto = ResultDto(result.hkjc_id, result.ht_time, result.ht_odd)
         dto.ht_prematch_odd = result.ht_prematch_odd
         dto.ht_prematch_goalline = result.ht_prematch_goalline
         dto.ht_rise = result.ht_rise
@@ -34,6 +34,7 @@ class ResultRepository:
         dto.ht_prob = result.ht_probability
         dto.ft_prob = result.ft_probability
         dto.ht_pred = result.ht_prediction
+        dto.id = result.id
         return dto
     
     def __MapFromDto(self, dto :ResultDto) -> tuple:
@@ -55,12 +56,12 @@ class ResultRepository:
                 dto.ht_prob,
                 dto.ft_prob,
                 dto.ht_pred,
-                dto.id)
+                dto.hkjc_id)
     
        
     def GetResultById(self, match_id:str) -> ResultDto:
         self.__logger.debug(f"正從資料庫取得{match_id}賽事的資料")
-        result = self.__cursor.execute(SELECT_QUERY + "WHERE id = ?", match_id).fetchone()
+        result = self.__cursor.execute(SELECT_QUERY + "WHERE hkjc_id = ?", match_id).fetchone()
         if result is None:
             self.__logger.debug(f"資料庫不存在{match_id}的資料")
             return None
@@ -78,19 +79,19 @@ class ResultRepository:
         for result in results:
             dto = self.__MapToDto(result)
             to_return.append(dto)
-            self.__cache[dto.id] = dto
+            self.__cache[dto.hkjc_id] = dto
             
         return list(self.__cache.values())
             
     def Upsert(self, dto:ResultDto):
-        is_new = self.GetResultById(dto.id) is None
+        is_new = self.GetResultById(dto.hkjc_id) is None
         data = self.__MapFromDto(dto)
         if is_new:
-            self.__logger.debug(f"正新增至資料庫{dto.id}賽事資料")
+            self.__logger.debug(f"正新增至資料庫{dto.hkjc_id}賽事資料")
             self.__cursor.execute(INSERT_QUERY, data)
             self.__cursor.commit()
         else:
-            self.__logger.debug(f"正更新資料庫{dto.id}賽事資料")
+            self.__logger.debug(f"正更新資料庫{dto.hkjc_id}賽事資料")
             self.__cursor.execute(UPDATE_QUERY, data)
             self.__cursor.commit()
                 

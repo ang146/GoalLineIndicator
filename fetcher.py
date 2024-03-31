@@ -143,27 +143,27 @@ class Fetcher:
         for dto in dtos:
             if dto.ft_success is None or dto.ht_success is None:
                 self.logger.debug(f"{dto.id}紀錄未齊全, 將補完賽事")
-                #print(f"{dto.id}紀錄未齊全, 將補完賽事")
-                scores = self.crawler.GetMatchResults(dto.id)
+                #print(f"{dto.hkjc_id}紀錄未齊全, 將補完賽事")
+                scores = self.crawler.GetMatchResults(dto.hkjc_id)
                 if len(scores) == 0:
-                    self.logger.debug(f"無法取得{dto.id}賽事賽果, 將跳過")
+                    self.logger.debug(f"無法取得{dto.hkjc_id}賽事賽果, 將跳過")
                     continue
-                prematch_odds = self.crawler.GetPreMatchOdds(dto.id)
+                prematch_odds = self.crawler.GetPreMatchOdds(dto.hkjc_id)
                 ht_goalline = list(prematch_odds['ht'])[0]
                 dto.ht_prematch_goalline = ht_goalline
                 dto.ht_prematch_odd = prematch_odds['ht'][ht_goalline][0]
                 dto.ht_rise = prematch_odds['ht'][ht_goalline][1]
                 dto.ht_success = scores['ht']
-                self.logger.debug(f"已取得{dto.id}賽事半場賽果: 半場入球{scores['ht']}, 中位數入球{ht_goalline}, 入球大賠率{dto.ht_prematch_odd}, 賠率流向為上升{dto.ht_rise}")
-                #print(f"已取得{dto.id}賽事半場賽果: 半場入球{scores['ht']}, 中位數入球{ht_goalline}, 入球大賠率{dto.ht_prematch_odd}, 賠率流向為上升{dto.ht_rise}")
+                self.logger.debug(f"已取得{dto.hkjc_id}賽事半場賽果: 半場入球{scores['ht']}, 中位數入球{ht_goalline}, 入球大賠率{dto.ht_prematch_odd}, 賠率流向為上升{dto.ht_rise}")
+                #print(f"已取得{dto.hkjc_id}賽事半場賽果: 半場入球{scores['ht']}, 中位數入球{ht_goalline}, 入球大賠率{dto.ht_prematch_odd}, 賠率流向為上升{dto.ht_rise}")
                 
                 ft_goalline = list(prematch_odds['ft'])[0]
                 dto.ft_prematch_goalline = ft_goalline
                 dto.ft_prematch_odd = prematch_odds['ft'][ft_goalline][0]
                 dto.ft_rise = prematch_odds['ft'][ft_goalline][1]
                 dto.ft_success = scores['ft']
-                self.logger.debug(f"已取得{dto.id}賽事全場賽果: 全半場入球{scores['ft']}, 中位數入球{ft_goalline}, 入球大賠率{dto.ft_prematch_odd}, 賠率流向為上升{dto.ft_rise}")
-                #print(f"已取得{dto.id}賽事全場賽果: 全半場入球{scores['ft']}, 中位數入球{ft_goalline}, 入球大賠率{dto.ft_prematch_odd}, 賠率流向為上升{dto.ft_rise}")
+                self.logger.debug(f"已取得{dto.hkjc_id}賽事全場賽果: 全半場入球{scores['ft']}, 中位數入球{ft_goalline}, 入球大賠率{dto.ft_prematch_odd}, 賠率流向為上升{dto.ft_rise}")
+                #print(f"已取得{dto.hkjc_id}賽事全場賽果: 全半場入球{scores['ft']}, 中位數入球{ft_goalline}, 入球大賠率{dto.ft_prematch_odd}, 賠率流向為上升{dto.ft_rise}")
                 
                 self.repository.Upsert(dto)
                 

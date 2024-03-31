@@ -20,7 +20,8 @@ async def SendNotificationToTelegramAsync():
     for result in results:
         msg = result[0] + '\n' + result[1]
         bot = telegram.Bot(token=TOKEN)
-        await bot.send_message(GROUP_ID, text=msg)
+        for channel in CHANNEL_IDs:
+            await bot.send_message(channel, text=msg)
         
 def ResultsFetchNewThread():
     logger.debug("正在取得完場賽事資料")
