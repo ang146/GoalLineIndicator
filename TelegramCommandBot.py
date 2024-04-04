@@ -106,26 +106,115 @@ async def PredictionByDays(update : Update, context :ContextTypes.DEFAULT_TYPE, 
     await update.message.reply_photo(open(temp_filename, 'rb'), caption=returnMessage)
     import os
     os.unlink(temp_filename)
+
+def GetRoadGraph(matches :List[ResultDto], predict :bool) -> str:    
+    listRoad = []
+    turnedDict = {}
     
+    def AddToRoad(success :bool):
+        if len(listRoad) == 0:
+            listRoad.append([success, None, None, None, None, None])
+            return
+        
+        latestValidRoad = 0
+        for i in range(len(listRoad)):
+            if listRoad[i][0] is None:
+                break
+            latestValidRoad = i
+        
+        if listRoad[latestValidRoad][0] != success:
+            latestValidRoad += 1
+            
+        if len(listRoad) <= latestValidRoad:
+            listRoad.append([None for _ in range(6)])
+            
+        filled = False
+        for i in range(6):
+            if listRoad[latestValidRoad][i] is None:
+                listRoad[latestValidRoad][i] = success
+                filled = True
+                break
+            
+        if not filled:
+            toSetRow = 5
+            for row, turningData in turnedDict.items():
+                if row == latestValidRoad:
+                    continue
+                
+                if row + turningData[1] >= latestValidRoad:
+                    toSetRow = turningData[0] - 1
+            if toSetRow < 0:
+                toSetRow = 0
+            if not latestValidRoad in turnedDict:
+                turnedDict[latestValidRoad] = [toSetRow, 0]
+                    
+            extended = latestValidRoad + 1
+            while not filled:
+                if extended >= len(listRoad):
+                    listRoad.append([None for _ in range(6)])
+                    listRoad[extended][toSetRow] = success
+                    turnedDict[latestValidRoad] = [toSetRow, turnedDict[latestValidRoad][1] + 1]
+                    filled = True
+                    break
+                if not listRoad[extended][toSetRow] is None:
+                    extended += 1
+                    filled = False
+                    pass
+                else:
+                    listRoad[extended][toSetRow] = success
+                    turnedDict[latestValidRoad] = [toSetRow, turnedDict[latestValidRoad][1] + 1]
+                    filled = True
+                    break
+        
+    for match in matches:
+        if predict:
+            if match.ht_success >= 1:
+                AddToRoad(True)
+            else:
+                AddToRoad(False)
+        else:
+            if match.ht_success == 0:
+                AddToRoad(True)
+            else:
+                AddToRoad(False)
+                
+    listRoad = listRoad[-14:]
+                
+    result = ""
+    for row in range(6):
+        for column in range(len(listRoad)):
+            if listRoad[column][row] == True:
+                result += '✅'
+            elif listRoad[column][row] == False:
+                result += '❌'
+            else:
+                result += '⬛️'
+        result += "\n"
+    
+    return result
+       
 async def PredictionRecent(update :Update, context :ContextTypes.DEFAULT_TYPE, predict :bool):
     matches :List[ResultDto] = sorted(repo.GetResults(False), key=lambda x: x.id)
     matches = [x for x in matches if x.id > 1060 and not x.ht_success is None and not x.ht_pred is None and x.ht_pred == predict]
-    matches = matches[:10]
-    reply_msg = f"牙bot預測近10場{'有' if predict else '無'}為:\n(最近)"
+    
+    roadMsg = GetRoadGraph(predict)
+    
+    matches = reversed(matches[-10:])
+    replyMsg = f"牙bot預測近10場{'有' if predict else '無'}為:\n(最近)"
     for match in matches:
         if match.ht_success >= 1:
             if predict:
-                reply_msg += '✅'
+                replyMsg += '✅'
             else:
-                reply_msg += '❌'
+                replyMsg += '❌'
         else:
             if predict:
-                reply_msg += '❌'
+                replyMsg += '❌'
             else:
-                reply_msg += '✅'
-    reply_msg += '(第10場)'
-    
-    await update.message.reply_text(reply_msg)
+                replyMsg += '✅'
+                
+    replyMsg += "\n\n 最近預測路紙:\n" + roadMsg
+    await update.message.reply_text(replyMsg)
     
 
 async def PredictTrueByDaysCommand(update, context):
